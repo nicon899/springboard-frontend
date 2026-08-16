@@ -19,13 +19,7 @@ import {
 } from '../constants/theme';
 import { ClubRole } from '../types/user';
 
-// ────────────────────────────────────────────────────────────
-// MOCK-VEREINSDATEN (TODO: replace with real API call)
-// ────────────────────────────────────────────────────────────
-const MOCK_CLUBS: Record<string, { name: string; city: string; memberCount: number }> = {
-  'club-1': { name: 'SC Wasserfreunde Berlin', city: 'Berlin', memberCount: 48 },
-  'club-2': { name: 'Berliner SV 1924', city: 'Berlin', memberCount: 112 },
-};
+import { api, ClubResponse } from '../../services/api';
 
 const ROLE_COLORS: Record<ClubRole, string> = {
   CLUB_ADMIN: Colors.statusLearning,
@@ -37,6 +31,35 @@ export default function ClubScreen() {
   const { t } = useTranslation();
   const { user, activeClubId, activeClubMembership, switchClub, canManageInvites } = useAuth();
   const [inviteModalVisible, setInviteModalVisible] = useState(false);
+  const [clubDetails, setClubDetails] = useState<ClubResponse | null>(null);
+  const [memberCount, setMemberCount] = useState<number | null>(null);
+
+  React.useEffect(() => {
+    if (!activeClubId) return;
+    let isMounted = true;
+
+    async function loadClubData() {
+      try {
+        const club = await api.getClubById(activeClubId);
+        if (isMounted) setClubDetails(club);
+      } catch (e) {
+        console.warn('Failed to load club details:', e);
+      }
+
+      try {
+        const members = await api.getClubMembers(activeClubId);
+        if (isMounted) setMemberCount(members.length);
+      } catch (e) {
+        // Permissions might restrict full member list for basic members
+        if (isMounted) setMemberCount(null);
+      }
+    }
+
+    loadClubData();
+    return () => {
+      isMounted = false;
+    };
+  }, [activeClubId]);
 
   if (!user || !activeClubId) {
     return (
@@ -46,7 +69,6 @@ export default function ClubScreen() {
     );
   }
 
-  const club = MOCK_CLUBS[activeClubId];
   const canInvite = canManageInvites();
 
   return (
@@ -57,15 +79,15 @@ export default function ClubScreen() {
           <Text style={styles.clubIcon}>🏆</Text>
         </View>
         <View style={styles.clubInfo}>
-          <Text style={styles.clubName}>{club?.name ?? activeClubMembership?.clubName}</Text>
-          <Text style={styles.clubCity}>📍 {club?.city ?? activeClubMembership?.clubCity}</Text>
+          <Text style={styles.clubName}>{clubDetails?.name ?? activeClubMembership?.clubName}</Text>
+          <Text style={styles.clubCity}>📍 {clubDetails?.city ?? activeClubMembership?.clubCity}</Text>
         </View>
       </View>
 
       {/* Stats-Zeile */}
       <View style={styles.statsRow}>
         <View style={styles.statCard}>
-          <Text style={styles.statValue}>{club?.memberCount ?? '—'}</Text>
+          <Text style={styles.statValue}>{memberCount != null ? memberCount : '—'}</Text>
           <Text style={styles.statLabel}>{t('club.members')}</Text>
         </View>
         <View style={styles.statCard}>

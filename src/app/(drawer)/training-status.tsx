@@ -25,29 +25,16 @@ import {
   Spacing,
 } from '../constants/theme';
 import { AthleteTrainingEntry, DiveHeight, DiveStatus, TrainerNote } from '../types/dive';
-import { DiveDefinition } from '../types/dive';
-import { SAMPLE_DIVES, DIVE_GROUP_NAMES } from '../constants/diveData';
+import { DIVE_GROUP_NAMES } from '../constants/diveData';
 
-// ────────────────────────────────────────────────────────────
-// MOCK-DATEN (TODO: replace with real API call)
-// ────────────────────────────────────────────────────────────
-const INITIAL_ENTRIES: AthleteTrainingEntry[] = [
-  {
-    id: 'e1', athleteId: 'me', diveCode: '101', height: '1m', status: 'MASTERED',
-    notes: [{ id: 'n1', text: 'Sehr sauber ausgeführt!', authorId: 'trainer-1', authorName: 'Max M.', createdAt: '2024-02-01T10:00:00Z', sharedWithAthlete: true }],
-    addedAt: '2024-01-10T00:00:00Z', updatedAt: '2024-02-01T10:00:00Z',
-  },
-  {
-    id: 'e2', athleteId: 'me', diveCode: '103', height: '1m', status: 'LEARNING',
-    notes: [{ id: 'n2', text: 'Anlauf noch verbessern.', authorId: 'trainer-1', authorName: 'Max M.', createdAt: '2024-02-05T09:00:00Z', sharedWithAthlete: false }],
-    addedAt: '2024-01-15T00:00:00Z', updatedAt: '2024-02-05T09:00:00Z',
-  },
-  {
-    id: 'e3', athleteId: 'me', diveCode: '403', height: '3m', status: 'PLANNED',
-    notes: [],
-    addedAt: '2024-02-10T00:00:00Z', updatedAt: '2024-02-10T00:00:00Z',
-  },
-];
+import {
+  api,
+  BACKEND_TO_HEIGHT,
+  HEIGHT_TO_BACKEND,
+  AthleteDiveStatusResponse,
+  CommentResponse,
+  DiveResponse,
+} from '../../services/api';
 
 const HEIGHTS: DiveHeight[] = ['1m', '3m', '5m', '7.5m', '10m'];
 const STATUSES: DiveStatus[] = ['PLANNED', 'LEARNING', 'MASTERED'];
@@ -59,15 +46,26 @@ export default function TrainingStatusScreen() {
   const navigation = useNavigation();
 
   const isTrainer = isTrainerOrAdmin();
+  const targetAthleteId = params.athleteId ?? user?.id ?? '';
   const viewingAthlete = params.athleteId && params.athleteId !== user?.id;
   const athleteLabel = params.athleteName ?? t('trainingStatus.myTraining');
 
   const [selectedHeight, setSelectedHeight] = useState<DiveHeight>('1m');
-  const [entries, setEntries] = useState<AthleteTrainingEntry[]>(INITIAL_ENTRIES);
+  const [entries, setEntries] = useState<AthleteTrainingEntry[]>([]);
+  const [catalogDives, setCatalogDives] = useState<DiveResponse[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Modals
-  const [statusModal, setStatusModal] = useState<{ visible: boolean; entryId: string; current: DiveStatus }>({
-    visible: false, entryId: '', current: 'PLANNED',
+  const [statusModal, setStatusModal] = useState<{
+    visible: boolean;
+    entryId: string;
+    diveId?: number;
+    execution?: 'A' | 'B' | 'C' | 'D';
+    current: DiveStatus;
+  }>({
+    visible: false,
+    entryId: '',
+    current: 'PLANNED',
   });
   const [addDiveModal, setAddDiveModal] = useState(false);
   const [noteModal, setNoteModal] = useState<{ visible: boolean; entryId: string }>({ visible: false, entryId: '' });
@@ -75,6 +73,55 @@ export default function TrainingStatusScreen() {
   const [noteShared, setNoteShared] = useState(true);
 
   const isDE = i18n.language === 'de';
+
+  // Load catalog dives & athlete dives from API
+  const loadData = useCallback(async () => {
+    if (!targetAthleteId) return;
+    setIsLoading(true);
+    try {
+      const [divesRes, commentsRes, catalogRes] = await Promise.all([
+        api.getAthleteDives(targetAthleteId).catch(() => [] as AthleteDiveStatusResponse[]),
+        api.getAthleteComments(targetAthleteId).catch(() => [] as CommentResponse[]),
+        api.getAllDives().catch(() => [] as DiveResponse[]),
+      ]);
+
+      setCatalogDives(catalogRes);
+
+      const mappedEntries: AthleteTrainingEntry[] = divesRes.map((d) => {
+        const diveNotes: TrainerNote[] = commentsRes
+          .filter((c) => c.athleteDiveStatusId === d.id || (!c.athleteDiveStatusId && String(c.athleteId) === String(targetAthleteId)))
+          .map((c) => ({
+            id: String(c.id),
+            text: c.content,
+            authorId: String(c.authorId),
+            authorName: c.authorName || 'Trainer',
+            createdAt: c.createdAt,
+            sharedWithAthlete: c.sharedWithAthlete,
+          }));
+
+        return {
+          id: String(d.id),
+          athleteId: String(d.athleteId),
+          diveCode: d.diveCode,
+          height: BACKEND_TO_HEIGHT[d.height] || '1m',
+          status: d.status,
+          notes: diveNotes,
+          addedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+      });
+
+      setEntries(mappedEntries);
+    } catch (e) {
+      console.warn('Failed to load training status:', e);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [targetAthleteId]);
+
+  React.useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   // Gefilterte Einträge für aktuelle Höhe
   const currentEntries = useMemo(
@@ -90,50 +137,69 @@ export default function TrainingStatusScreen() {
   }, [currentEntries]);
 
   const getDiveDefinition = useCallback(
-    (code: string): DiveDefinition | undefined => SAMPLE_DIVES.find((d) => d.code === code),
-    []
+    (code: string): DiveResponse | undefined => catalogDives.find((d) => d.code === code),
+    [catalogDives]
   );
 
-  const handleStatusChange = (status: DiveStatus) => {
-    setEntries((prev) =>
-      prev.map((e) =>
-        e.id === statusModal.entryId ? { ...e, status, updatedAt: new Date().toISOString() } : e
-      )
-    );
+  const handleStatusChange = async (status: DiveStatus) => {
+    const targetEntry = entries.find((e) => e.id === statusModal.entryId);
+    if (!targetEntry || !targetAthleteId) return;
+
     setStatusModal((s) => ({ ...s, visible: false }));
+
+    // Find dive catalog ID
+    let diveId = statusModal.diveId;
+    if (!diveId) {
+      const catalogItem = catalogDives.find((d) => d.code === targetEntry.diveCode);
+      diveId = catalogItem ? catalogItem.id : 1;
+    }
+
+    try {
+      await api.updateAthleteDive(targetAthleteId, {
+        diveId,
+        execution: statusModal.execution || 'A',
+        height: HEIGHT_TO_BACKEND[targetEntry.height],
+        status,
+      });
+      await loadData();
+    } catch (e: any) {
+      Alert.alert(t('common.error'), e?.message || 'Failed to update dive status');
+    }
   };
 
-  const handleAddDive = (dive: DiveDefinition) => {
-    const newEntry: AthleteTrainingEntry = {
-      id: `e-${Date.now()}`,
-      athleteId: params.athleteId ?? user?.id ?? 'me',
-      diveCode: dive.code,
-      height: selectedHeight,
-      status: 'PLANNED',
-      notes: [],
-      addedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    setEntries((prev) => [...prev, newEntry]);
+  const handleAddDive = async (dive: DiveDefinition) => {
+    if (!targetAthleteId) return;
+    try {
+      const catalogItem = catalogDives.find((d) => d.code === dive.code);
+      const diveId = catalogItem ? catalogItem.id : 1;
+
+      await api.updateAthleteDive(targetAthleteId, {
+        diveId,
+        execution: 'A',
+        height: HEIGHT_TO_BACKEND[selectedHeight],
+        status: 'PLANNED',
+      });
+      await loadData();
+    } catch (e: any) {
+      Alert.alert(t('common.error'), e?.message || 'Failed to add dive to training plan');
+    }
   };
 
-  const handleAddNote = () => {
-    if (!noteText.trim()) return;
-    const note: TrainerNote = {
-      id: `note-${Date.now()}`,
-      text: noteText.trim(),
-      authorId: user?.id ?? 'trainer',
-      authorName: `${user?.firstName} ${user?.lastName}`,
-      createdAt: new Date().toISOString(),
-      sharedWithAthlete: noteShared,
-    };
-    setEntries((prev) =>
-      prev.map((e) =>
-        e.id === noteModal.entryId ? { ...e, notes: [...e.notes, note] } : e
-      )
-    );
-    setNoteText('');
-    setNoteModal({ visible: false, entryId: '' });
+  const handleAddNote = async () => {
+    if (!noteText.trim() || !targetAthleteId) return;
+    try {
+      const statusIdNum = noteModal.entryId ? Number(noteModal.entryId) : undefined;
+      await api.createComment(targetAthleteId, {
+        content: noteText.trim(),
+        sharedWithAthlete: noteShared,
+        athleteDiveStatusId: isNaN(statusIdNum as number) ? undefined : statusIdNum,
+      });
+      setNoteText('');
+      setNoteModal({ visible: false, entryId: '' });
+      await loadData();
+    } catch (e: any) {
+      Alert.alert(t('common.error'), e?.message || 'Failed to add note');
+    }
   };
 
   const existingCodes = entries

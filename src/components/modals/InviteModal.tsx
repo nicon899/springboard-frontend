@@ -21,6 +21,8 @@ import {
   Spacing,
 } from '../../app/constants/theme';
 
+import { api } from '../../services/api';
+
 interface InviteModalProps {
   visible: boolean;
   clubId: string;
@@ -47,10 +49,14 @@ export default function InviteModal({ visible, clubId, onClose }: InviteModalPro
     if (!email.trim()) return;
     setIsLoading(true);
     try {
-      // TODO: replace with real API call: POST /api/clubs/{clubId}/invitations
-      await new Promise((r) => setTimeout(r, 800));
-      const mockToken = `SPR-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
-      setGeneratedToken(mockToken);
+      const response = await api.createInvitation({
+        clubId: Number(clubId),
+        email: email.trim(),
+        role: selectedRole,
+      });
+      setGeneratedToken(response.token);
+    } catch (e: any) {
+      Alert.alert(t('common.error'), e?.message || t('club.inviteModal.error'));
     } finally {
       setIsLoading(false);
     }

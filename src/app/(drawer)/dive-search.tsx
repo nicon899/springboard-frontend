@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
+  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
@@ -7,9 +8,11 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
-import { searchDives, DIVE_GROUP_NAMES } from '../constants/diveData';
+import { api, DiveResponse } from '../../services/api';
+import { searchDives, DIVE_GROUP_NAMES, mapApiDivesToDefinitions } from '../constants/diveData';
 import { DiveDefinition, DiveHeight, ExecutionPosition } from '../types/dive';
 import {
   BorderRadius,
@@ -33,17 +36,70 @@ const POSITION_LABELS: Record<ExecutionPosition, { de: string; en: string }> = {
 export default function DiveSearchScreen() {
   const { t, i18n } = useTranslation();
   const { user, isTrainerOrAdmin } = useAuth();
+  const router = useRouter();
   const [query, setQuery] = useState('');
+  const [selectedDiveCode, setSelectedDiveCode] = useState<string | null>(null);
+  const [dives, setDives] = useState<DiveDefinition[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
   const isDE = i18n.language === 'de';
   const isTrainer = isTrainerOrAdmin();
 
-  const results = useMemo(() => searchDives(query), [query]);
-  const exactMatch: DiveDefinition | null = results.length === 1 ? results[0] : null;
+  useEffect(() => {
+    let isMounted = true;
+    async function loadCatalogDives() {
+      setIsLoading(true);
+      try {
+        const apiDives: DiveResponse[] = await api.getAllDives();
+        if (isMounted && apiDives && apiDives.length > 0) {
+          const merged = mapApiDivesToDefinitions(apiDives);
+          setDives(merged);
+        }
+      } catch (e) {
+        console.warn('Failed to load dives from API, using catalog definitions:', e);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+
+    loadCatalogDives();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const results = useMemo(() => searchDives(query, dives), [query, dives]);
+
+  // If user tapped a specific search result or there's an exact 1-to-1 match
+  const exactMatch: DiveDefinition | null = useMemo(() => {
+    if (selectedDiveCode) {
+      const selected = dives.find((d) => d.code === selectedDiveCode);
+      if (selected) return selected;
+    }
+    if (results.length === 1) return results[0];
+    const exactCode = results.find((d) => d.code.toLowerCase() === query.trim().toLowerCase());
+    return exactCode ?? null;
+  }, [selectedDiveCode, results, query, dives]);
+
+  const handleSelectDive = (code: string) => {
+    setSelectedDiveCode(code);
+  };
+
+  const handleQueryChange = (text: string) => {
+    setQuery(text);
+    setSelectedDiveCode(null);
+  };
+
+  const handleAddToTrainingPlan = (dive: DiveDefinition) => {
+    router.push({
+      pathname: '/(drawer)/training-status',
+      params: { athleteId: user?.id },
+    });
+  };
 
   const statusMessage = useMemo(() => {
     if (!query.trim()) return t('diveSearch.waitingForInput');
     if (results.length === 0) return t('diveSearch.noResults');
-    if (results.length > 1) return t('diveSearch.multipleResults');
     return null;
   }, [query, results.length, t]);
 
@@ -63,26 +119,59 @@ export default function DiveSearchScreen() {
           placeholder={t('diveSearch.searchPlaceholder')}
           placeholderTextColor={Colors.textTertiary}
           value={query}
-          onChangeText={setQuery}
+          onChangeText={handleQueryChange}
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType="search"
         />
+        {isLoading && <ActivityIndicator size="small" color={Colors.primary} style={styles.loader} />}
         {query.length > 0 && (
-          <TouchableOpacity onPress={() => setQuery('')} style={styles.clearBtn}>
+          <TouchableOpacity
+            onPress={() => {
+              setQuery('');
+              setSelectedDiveCode(null);
+            }}
+            style={styles.clearBtn}
+          >
             <Text style={styles.clearBtnText}>✕</Text>
           </TouchableOpacity>
         )}
       </View>
 
-      {/* Status-Nachricht (kein / kein eindeutiger Treffer) */}
-      {statusMessage && (
+      {/* Mehrere Treffer: Vorschau-Liste */}
+      {results.length > 1 && (
+        <View style={styles.resultsList}>
+          <Text style={styles.resultsListTitle}>
+            {t('diveSearch.multipleResults')} ({results.length})
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.resultChipsRow}>
+            {results.map((d) => {
+              const isSelected = exactMatch?.code === d.code;
+              return (
+                <TouchableOpacity
+                  key={d.code}
+                  style={[styles.resultChip, isSelected && styles.resultChipActive]}
+                  onPress={() => handleSelectDive(d.code)}
+                >
+                  <Text style={[styles.resultChipCode, isSelected && styles.resultChipTextActive]}>{d.code}</Text>
+                  <Text style={[styles.resultChipName, isSelected && styles.resultChipTextActive]} numberOfLines={1}>
+                    {isDE ? d.nameDe : d.nameEn}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* Status-Nachricht */}
+      {statusMessage && results.length === 0 && (
         <View style={styles.statusContainer}>
           <Text style={styles.statusText}>{statusMessage}</Text>
         </View>
       )}
 
-      {/* Genau 1 Treffer: Detailansicht */}
+      {/* Detailansicht */}
       {exactMatch && (
         <View style={styles.resultCard}>
           {/* Sprung-Header */}
@@ -129,9 +218,7 @@ export default function DiveSearchScreen() {
                       const dd = posRow?.[h];
                       return (
                         <View key={h} style={styles.matrixCell}>
-                          <Text
-                            style={[styles.ddValue, dd == null && styles.ddEmpty]}
-                          >
+                          <Text style={[styles.ddValue, dd == null && styles.ddEmpty]}>
                             {dd != null ? dd.toFixed(1) : t('diveSearch.notAvailable')}
                           </Text>
                         </View>
@@ -145,7 +232,10 @@ export default function DiveSearchScreen() {
 
           {/* Trainer: Zum Trainingsplan hinzufügen */}
           {isTrainer && (
-            <TouchableOpacity style={styles.addToplanBtn}>
+            <TouchableOpacity
+              style={styles.addToplanBtn}
+              onPress={() => handleAddToTrainingPlan(exactMatch)}
+            >
               <Text style={styles.addToPlanLabel}>{t('diveSearch.addToTrainingPlan')}</Text>
             </TouchableOpacity>
           )}
@@ -178,7 +268,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: Colors.border,
     paddingHorizontal: Spacing.md,
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.md,
     ...Shadows.sm,
   },
   searchIcon: { fontSize: 16, marginRight: Spacing.sm },
@@ -188,8 +278,50 @@ const styles = StyleSheet.create({
     fontSize: FontSize.md,
     color: Colors.textPrimary,
   },
+  loader: { marginRight: Spacing.sm },
   clearBtn: { padding: Spacing.sm },
   clearBtnText: { fontSize: FontSize.sm, color: Colors.textTertiary },
+  resultsList: {
+    marginBottom: Spacing.lg,
+  },
+  resultsListTitle: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.semiBold,
+    color: Colors.textSecondary,
+    marginBottom: Spacing.sm,
+    textTransform: 'uppercase',
+  },
+  resultChipsRow: {
+    gap: Spacing.sm,
+    paddingBottom: Spacing.xs,
+  },
+  resultChip: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'flex-start',
+    maxWidth: 200,
+  },
+  resultChipActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  resultChipCode: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.bold,
+    color: Colors.primary,
+  },
+  resultChipName: {
+    fontSize: FontSize.xs,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  resultChipTextActive: {
+    color: Colors.white,
+  },
   statusContainer: {
     flex: 1,
     alignItems: 'center',

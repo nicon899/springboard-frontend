@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   FlatList,
   StyleSheet,
@@ -22,17 +22,7 @@ import {
 } from '../constants/theme';
 import { AthleteListItem } from '../types/user';
 
-// ────────────────────────────────────────────────────────────
-// MOCK-ATHLETEN-DATEN (TODO: replace with real API call)
-// ────────────────────────────────────────────────────────────
-const MOCK_ATHLETES: AthleteListItem[] = [
-  { id: 'a1', firstName: 'Lena', lastName: 'Berger', age: 14, category: 'YOUTH', masteredDiveCount: 8 },
-  { id: 'a2', firstName: 'Jonas', lastName: 'Müller', age: 17, category: 'COMPETITIVE', masteredDiveCount: 15 },
-  { id: 'a3', firstName: 'Sophie', lastName: 'Hartmann', age: 12, category: 'YOUTH', masteredDiveCount: 5 },
-  { id: 'a4', firstName: 'Felix', lastName: 'Schmidt', age: 19, category: 'COMPETITIVE', masteredDiveCount: 22 },
-  { id: 'a5', firstName: 'Mia', lastName: 'Wagner', age: 15, category: 'YOUTH', masteredDiveCount: 11 },
-  { id: 'a6', firstName: 'Tim', lastName: 'Fischer', age: 20, category: 'COMPETITIVE', masteredDiveCount: 30 },
-];
+import { api } from '../../services/api';
 
 type FilterCategory = 'ALL' | 'YOUTH' | 'COMPETITIVE';
 
@@ -41,11 +31,70 @@ export default function TrainerScreen() {
   const { activeClubMembership } = useAuth();
   const router = useRouter();
 
+  const [athletes, setAthletes] = useState<AthleteListItem[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<FilterCategory>('ALL');
 
+  useEffect(() => {
+    if (!activeClubMembership?.clubId) return;
+    let isMounted = true;
+
+    async function loadAthletes() {
+      setIsLoading(true);
+      try {
+        const members = await api.getClubMembers(activeClubMembership.clubId);
+        // Load athlete profiles and dive stats
+        const athleteItems: AthleteListItem[] = await Promise.all(
+          members.map(async (m) => {
+            let age = 18;
+            let firstName = m.userFullName?.split(' ')[0] || 'Athlete';
+            let lastName = m.userFullName?.split(' ').slice(1).join(' ') || '';
+            let masteredDiveCount = 0;
+
+            try {
+              const profile = await api.getUserById(m.userId);
+              if (profile.firstName) firstName = profile.firstName;
+              if (profile.lastName) lastName = profile.lastName;
+              if (profile.age != null) age = profile.age;
+            } catch {}
+
+            try {
+              const dives = await api.getAthleteDives(m.userId);
+              masteredDiveCount = dives.filter((d) => d.status === 'MASTERED').length;
+            } catch {}
+
+            const category: 'YOUTH' | 'COMPETITIVE' = age < 16 ? 'YOUTH' : 'COMPETITIVE';
+
+            return {
+              id: String(m.userId),
+              firstName,
+              lastName,
+              age,
+              category,
+              masteredDiveCount,
+            };
+          })
+        );
+
+        if (isMounted) {
+          setAthletes(athleteItems);
+        }
+      } catch (e) {
+        console.warn('Failed to load athletes for club:', e);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+
+    loadAthletes();
+    return () => {
+      isMounted = false;
+    };
+  }, [activeClubMembership?.clubId]);
+
   const filteredAthletes = useMemo(() => {
-    let list = MOCK_ATHLETES;
+    let list = athletes;
     if (activeFilter !== 'ALL') {
       list = list.filter((a) => a.category === activeFilter);
     }
@@ -58,7 +107,7 @@ export default function TrainerScreen() {
       );
     }
     return list;
-  }, [searchQuery, activeFilter]);
+  }, [athletes, searchQuery, activeFilter]);
 
   const filters: { key: FilterCategory; labelKey: string }[] = [
     { key: 'ALL', labelKey: 'trainer.filterAll' },

@@ -57,8 +57,8 @@ export default function AuthScreen() {
     try {
       await login({ email: email.trim(), password });
       // Navigation erfolgt automatisch über AppGate in _layout.tsx
-    } catch {
-      setError(t('auth.errors.loginFailed'));
+    } catch (e: any) {
+      setError(e?.message || t('auth.errors.loginFailed'));
     }
   };
 
@@ -82,8 +82,8 @@ export default function AuthScreen() {
         gender,
       });
       // Navigation erfolgt automatisch über AppGate in _layout.tsx
-    } catch {
-      setError(t('auth.errors.registerFailed'));
+    } catch (e: any) {
+      setError(e?.message || t('auth.errors.registerFailed'));
     }
   };
 

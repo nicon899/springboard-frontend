@@ -10,7 +10,8 @@ import {
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { DiveDefinition, DiveHeight } from '../../app/types/dive';
-import { DIVE_GROUP_NAMES, SAMPLE_DIVES } from '../../app/constants/diveData';
+import { DIVE_GROUP_NAMES, mapApiDivesToDefinitions } from '../../app/constants/diveData';
+import { api, DiveResponse } from '../../services/api';
 import {
   BorderRadius,
   Colors,
@@ -37,15 +38,30 @@ export default function AddDiveModal({
 }: AddDiveModalProps) {
   const { t, i18n } = useTranslation();
   const [query, setQuery] = useState('');
+  const [dives, setDives] = useState<DiveDefinition[]>([]);
 
-  const availableDives = SAMPLE_DIVES.filter((d) => {
-    // Sprung muss eine DD für die gewählte Höhe haben
-    const hasHeight = Object.values(d.difficulties).some(
-      (pos) => pos[height] != null
-    );
-    // Und darf noch nicht im Plan sein
-    const notAdded = !existingCodes.includes(d.code);
-    return hasHeight && notAdded;
+  React.useEffect(() => {
+    let isMounted = true;
+    async function loadCatalog() {
+      try {
+        const apiDives: DiveResponse[] = await api.getAllDives();
+        if (isMounted && apiDives && apiDives.length > 0) {
+          setDives(mapApiDivesToDefinitions(apiDives));
+        }
+      } catch (e) {
+        console.warn('Failed to load dives from API in AddDiveModal:', e);
+      }
+    }
+    if (visible) {
+      loadCatalog();
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [visible]);
+
+  const availableDives = dives.filter((d) => {
+    return !existingCodes.includes(d.code);
   });
 
   const filteredDives = query.trim()

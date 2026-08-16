@@ -7,14 +7,8 @@ import React, {
 } from 'react';
 import * as SecureStore from 'expo-secure-store';
 
-import { AuthState, ClubRole, LoginCredentials, RegisterWithInvitePayload, User } from '../app/types/user';
-import { ClubMembership } from '../app/types/user';
-
-// ────────────────────────────────────────────────────────────
-// SECURE-STORE KEYS
-// ────────────────────────────────────────────────────────────
-const JWT_KEY = 'springboard_jwt';
-const ACTIVE_CLUB_KEY = 'springboard_active_club';
+import { AuthState, ClubMembership, ClubRole, LoginCredentials, RegisterWithInvitePayload, User } from '../app/types/user';
+import { api, JWT_KEY, ACTIVE_CLUB_KEY, setAuthToken, UserProfileResponse } from '../services/api';
 
 // ────────────────────────────────────────────────────────────
 // CONTEXT-TYP
@@ -24,6 +18,7 @@ interface AuthContextValue extends AuthState {
   registerWithInvite: (payload: RegisterWithInvitePayload) => Promise<void>;
   logout: () => Promise<void>;
   switchClub: (clubId: string) => Promise<void>;
+  refreshProfile: () => Promise<void>;
   // Hilfsfunktionen
   hasClubRole: (...roles: ClubRole[]) => boolean;
   isTrainerOrAdmin: () => boolean;
@@ -69,84 +64,55 @@ const initialState: AuthState = {
 };
 
 // ────────────────────────────────────────────────────────────
-// MOCK-API FUNKTIONEN (TODO: replace with real API calls)
+// USER PROFILE AGGREGATOR
 // ────────────────────────────────────────────────────────────
-const MOCK_DELAY = 800;
+async function buildUserFromProfile(profile: UserProfileResponse): Promise<User> {
+  const globalRole = profile.roles.includes('ROLE_ADMIN') ? 'ROLE_ADMIN' : 'ROLE_USER';
+  const memberships: ClubMembership[] = [];
 
-async function mockLogin(email: string, _password: string): Promise<{ user: User; token: string }> {
-  await new Promise((r) => setTimeout(r, MOCK_DELAY));
+  if (profile.clubIds && profile.clubIds.length > 0) {
+    await Promise.all(
+      profile.clubIds.map(async (clubId) => {
+        try {
+          const club = await api.getClubById(clubId);
+          let memberRole: ClubRole = 'MEMBER';
+          let joinedAt = new Date().toISOString();
 
-  // Demo-User: Trainer
-  if (email.toLowerCase().includes('trainer')) {
-    const user: User = {
-      id: 'u-trainer-1',
-      email,
-      firstName: 'Max',
-      lastName: 'Mustermann',
-      globalRole: 'ROLE_USER',
-      memberships: [
-        {
-          clubId: 'club-1',
-          clubName: 'SC Wasserfreunde Berlin',
-          clubCity: 'Berlin',
-          role: 'TRAINER',
-          joinedAt: '2023-01-15T00:00:00Z',
-        },
-      ],
-    };
-    return { user, token: 'mock-jwt-trainer-token' };
+          try {
+            const members = await api.getClubMembers(clubId);
+            const myMembership = members.find((m) => m.userId === profile.id);
+            if (myMembership) {
+              memberRole = myMembership.clubRole;
+              joinedAt = myMembership.joinedAt;
+            }
+          } catch {
+            // Non-admin/trainer might have restricted permissions on members list
+          }
+
+          memberships.push({
+            clubId: String(club.id),
+            clubName: club.name,
+            clubCity: club.city || '',
+            role: memberRole,
+            joinedAt,
+          });
+        } catch (e) {
+          console.warn(`Failed to fetch details for club ${clubId}:`, e);
+        }
+      })
+    );
   }
 
-  // Demo-User: Member
-  const user: User = {
-    id: 'u-member-1',
-    email,
-    firstName: 'Anna',
-    lastName: 'Musterfrau',
-    age: 17,
-    gender: 'FEMALE',
-    globalRole: 'ROLE_USER',
-    memberships: [
-      {
-        clubId: 'club-1',
-        clubName: 'SC Wasserfreunde Berlin',
-        clubCity: 'Berlin',
-        role: 'MEMBER',
-        joinedAt: '2023-03-01T00:00:00Z',
-      },
-      {
-        clubId: 'club-2',
-        clubName: 'Berliner SV 1924',
-        clubCity: 'Berlin',
-        role: 'MEMBER',
-        joinedAt: '2024-01-10T00:00:00Z',
-      },
-    ],
+  return {
+    id: String(profile.id),
+    email: profile.email,
+    firstName: profile.firstName,
+    lastName: profile.lastName,
+    age: profile.age,
+    gender: profile.gender as any,
+    globalRole,
+    memberships,
   };
-  return { user, token: 'mock-jwt-member-token' };
-}
-
-async function mockRegisterWithInvite(payload: RegisterWithInvitePayload): Promise<{ user: User; token: string }> {
-  await new Promise((r) => setTimeout(r, MOCK_DELAY));
-  const user: User = {
-    id: `u-new-${Date.now()}`,
-    email: payload.email,
-    firstName: payload.firstName,
-    lastName: payload.lastName,
-    age: payload.age,
-    gender: payload.gender,
-    globalRole: 'ROLE_USER',
-    memberships: [
-      {
-        clubId: 'club-1',
-        clubName: 'SC Wasserfreunde Berlin',
-        clubCity: 'Berlin',
-        role: 'MEMBER',
-        joinedAt: new Date().toISOString(),
-      },
-    ],
-  };
-  return { user, token: `mock-jwt-new-${Date.now()}` };
 }
 
 // ────────────────────────────────────────────────────────────
@@ -157,92 +123,87 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
-  // Beim Start: gespeichertes Token laden
+  // Load profile and memberships helper
+  const loadProfile = useCallback(async (token: string, preferredClubId?: string | null) => {
+    setAuthToken(token);
+    const profile = await api.getMyProfile();
+    const user = await buildUserFromProfile(profile);
+    const activeClubId =
+      preferredClubId && user.memberships.some((m) => m.clubId === preferredClubId)
+        ? preferredClubId
+        : user.memberships[0]?.clubId ?? null;
+
+    dispatch({
+      type: 'SET_AUTH',
+      payload: { user, token, activeClubId },
+    });
+  }, []);
+
+  // Beim Start: gespeichertes Token laden und /me aufrufen
   useEffect(() => {
     async function bootstrap() {
       try {
         const token = await SecureStore.getItemAsync(JWT_KEY);
-        const activeClubId = await SecureStore.getItemAsync(ACTIVE_CLUB_KEY);
+        const storedClubId = await SecureStore.getItemAsync(ACTIVE_CLUB_KEY);
         if (token) {
-          // TODO: Hier würde ein /me-Endpoint aufgerufen, um das Profil zu laden
-          // Für das Scaffold: Mock-Profil aus Demo-Token
-          const isMock = token.startsWith('mock-jwt-');
-          if (isMock) {
-            const isTrainer = token.includes('trainer');
-            const user: User = isTrainer
-              ? {
-                  id: 'u-trainer-1',
-                  email: 'trainer@springboard.app',
-                  firstName: 'Max',
-                  lastName: 'Mustermann',
-                  globalRole: 'ROLE_USER',
-                  memberships: [
-                    { clubId: 'club-1', clubName: 'SC Wasserfreunde Berlin', clubCity: 'Berlin', role: 'TRAINER', joinedAt: '2023-01-15T00:00:00Z' },
-                  ],
-                }
-              : {
-                  id: 'u-member-1',
-                  email: 'anna@springboard.app',
-                  firstName: 'Anna',
-                  lastName: 'Musterfrau',
-                  age: 17,
-                  gender: 'FEMALE',
-                  globalRole: 'ROLE_USER',
-                  memberships: [
-                    { clubId: 'club-1', clubName: 'SC Wasserfreunde Berlin', clubCity: 'Berlin', role: 'MEMBER', joinedAt: '2023-03-01T00:00:00Z' },
-                    { clubId: 'club-2', clubName: 'Berliner SV 1924', clubCity: 'Berlin', role: 'MEMBER', joinedAt: '2024-01-10T00:00:00Z' },
-                  ],
-                };
-            dispatch({
-              type: 'SET_AUTH',
-              payload: {
-                user,
-                token,
-                activeClubId: activeClubId ?? user.memberships[0]?.clubId ?? null,
-              },
-            });
+          try {
+            await loadProfile(token, storedClubId);
             return;
+          } catch (e) {
+            console.warn('Stored token is invalid or expired:', e);
+            await SecureStore.deleteItemAsync(JWT_KEY).catch(() => {});
+            await SecureStore.deleteItemAsync(ACTIVE_CLUB_KEY).catch(() => {});
+            setAuthToken(null);
           }
         }
       } catch (e) {
-        // SecureStore nicht verfügbar (z.B. Web)
-        console.warn('SecureStore unavailable:', e);
+        console.warn('SecureStore bootstrap error:', e);
       }
       dispatch({ type: 'SET_LOADING', payload: false });
     }
     bootstrap();
-  }, []);
+  }, [loadProfile]);
 
-  const login = useCallback(async (credentials: LoginCredentials) => {
-    dispatch({ type: 'SET_LOADING', payload: true });
-    try {
-      const { user, token } = await mockLogin(credentials.email, credentials.password);
-      const activeClubId = user.memberships[0]?.clubId ?? null;
-      await SecureStore.setItemAsync(JWT_KEY, token);
-      if (activeClubId) await SecureStore.setItemAsync(ACTIVE_CLUB_KEY, activeClubId);
-      dispatch({ type: 'SET_AUTH', payload: { user, token, activeClubId } });
-    } catch (e) {
-      dispatch({ type: 'SET_LOADING', payload: false });
-      throw e;
-    }
-  }, []);
+  const login = useCallback(
+    async (credentials: LoginCredentials) => {
+      dispatch({ type: 'SET_LOADING', payload: true });
+      try {
+        const authRes = await api.login(credentials);
+        await SecureStore.setItemAsync(JWT_KEY, authRes.token);
+        await loadProfile(authRes.token);
+      } catch (e) {
+        dispatch({ type: 'SET_LOADING', payload: false });
+        throw e;
+      }
+    },
+    [loadProfile]
+  );
 
-  const registerWithInvite = useCallback(async (payload: RegisterWithInvitePayload) => {
-    dispatch({ type: 'SET_LOADING', payload: true });
-    try {
-      const { user, token } = await mockRegisterWithInvite(payload);
-      const activeClubId = user.memberships[0]?.clubId ?? null;
-      await SecureStore.setItemAsync(JWT_KEY, token);
-      if (activeClubId) await SecureStore.setItemAsync(ACTIVE_CLUB_KEY, activeClubId);
-      dispatch({ type: 'SET_AUTH', payload: { user, token, activeClubId } });
-    } catch (e) {
-      dispatch({ type: 'SET_LOADING', payload: false });
-      throw e;
-    }
-  }, []);
+  const registerWithInvite = useCallback(
+    async (payload: RegisterWithInvitePayload) => {
+      dispatch({ type: 'SET_LOADING', payload: true });
+      try {
+        const authRes = await api.registerWithInvite({
+          token: payload.inviteToken,
+          password: payload.password,
+          firstName: payload.firstName,
+          lastName: payload.lastName,
+          age: payload.age,
+          gender: payload.gender,
+        });
+        await SecureStore.setItemAsync(JWT_KEY, authRes.token);
+        await loadProfile(authRes.token);
+      } catch (e) {
+        dispatch({ type: 'SET_LOADING', payload: false });
+        throw e;
+      }
+    },
+    [loadProfile]
+  );
 
   const logout = useCallback(async () => {
     try {
+      setAuthToken(null);
       await SecureStore.deleteItemAsync(JWT_KEY);
       await SecureStore.deleteItemAsync(ACTIVE_CLUB_KEY);
     } catch (e) {
@@ -260,6 +221,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'SET_ACTIVE_CLUB', payload: clubId });
   }, []);
 
+  const refreshProfile = useCallback(async () => {
+    if (!state.token) return;
+    await loadProfile(state.token, state.activeClubId);
+  }, [state.token, state.activeClubId, loadProfile]);
+
   // ── Hilfsfunktionen ──
   const activeClubMembership: ClubMembership | null =
     state.user?.memberships.find((m) => m.clubId === state.activeClubId) ?? null;
@@ -273,8 +239,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const isTrainerOrAdmin = useCallback(
-    () => hasClubRole('TRAINER', 'CLUB_ADMIN'),
-    [hasClubRole]
+    () => hasClubRole('TRAINER', 'CLUB_ADMIN') || state.user?.globalRole === 'ROLE_ADMIN',
+    [hasClubRole, state.user]
   );
 
   const canManageInvites = useCallback(
@@ -290,6 +256,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     registerWithInvite,
     logout,
     switchClub,
+    refreshProfile,
     hasClubRole,
     isTrainerOrAdmin,
     canManageInvites,
