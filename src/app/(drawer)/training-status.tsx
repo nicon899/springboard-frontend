@@ -71,6 +71,14 @@ export default function TrainingStatusScreen() {
   const [noteModal, setNoteModal] = useState<{ visible: boolean; entryId: string }>({ visible: false, entryId: '' });
   const [noteText, setNoteText] = useState('');
   const [noteShared, setNoteShared] = useState(true);
+  const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
+
+  const toggleNotes = (entryId: string) => {
+    setExpandedNotes((prev) => ({
+      ...prev,
+      [entryId]: !prev[entryId],
+    }));
+  };
 
   const isDE = i18n.language === 'de';
 
@@ -213,6 +221,21 @@ export default function TrainingStatusScreen() {
     const visibleNotes = isTrainer
       ? entry.notes
       : entry.notes.filter((n) => n.sharedWithAthlete);
+    const hasNotes = visibleNotes.length > 0;
+    const isExpanded = !!expandedNotes[entry.id];
+
+    const sortedNotes = hasNotes
+      ? [...visibleNotes].sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        )
+      : [];
+    const latestNote = sortedNotes[0];
+    const latestDateFormatted = latestNote?.createdAt
+      ? new Date(latestNote.createdAt).toLocaleDateString(isDE ? 'de-DE' : 'en-US', {
+          day: 'numeric',
+          month: 'short',
+        })
+      : '';
 
     return (
       <View key={entry.id} style={styles.entryCard}>
@@ -243,26 +266,51 @@ export default function TrainingStatusScreen() {
           )}
         </View>
 
-        {/* Notizen */}
-        {visibleNotes.length > 0 && (
+        {/* Notizen (Einklappbar, Default: Eingeklappt) */}
+        {hasNotes && (
           <View style={styles.notesSection}>
-            <Text style={styles.notesSectionTitle}>{t('trainingStatus.notes')}</Text>
-            {visibleNotes.map((note) => (
-              <View key={note.id} style={styles.noteItem}>
-                <View style={styles.noteHeader}>
-                  <Text style={styles.noteAuthor}>{t('trainingStatus.noteBy', { author: note.authorName })}</Text>
-                  <Text style={styles.noteDate}>
-                    {new Date(note.createdAt).toLocaleDateString(isDE ? 'de-DE' : 'en-US', { month: 'short', day: 'numeric' })}
-                  </Text>
-                  {!note.sharedWithAthlete && (
-                    <View style={styles.privateChip}>
-                      <Text style={styles.privateChipText}>🔒</Text>
-                    </View>
-                  )}
+            <TouchableOpacity
+              style={styles.notesToggleHeader}
+              onPress={() => toggleNotes(entry.id)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.notesToggleLeft}>
+                <Text style={styles.notesSectionTitle}>{t('trainingStatus.notes')}</Text>
+                <View style={styles.notesBadge}>
+                  <Text style={styles.notesBadgeText}>{visibleNotes.length}</Text>
                 </View>
-                <Text style={styles.noteText}>{note.text}</Text>
               </View>
-            ))}
+
+              <View style={styles.notesToggleRight}>
+                {!isExpanded && latestDateFormatted ? (
+                  <Text style={styles.notesLatestDate}>
+                    {t('trainingStatus.latestNote', { date: latestDateFormatted })}
+                  </Text>
+                ) : null}
+                <Text style={styles.notesToggleChevron}>{isExpanded ? '▲' : '▼'}</Text>
+              </View>
+            </TouchableOpacity>
+
+            {isExpanded && (
+              <View style={styles.notesList}>
+                {sortedNotes.map((note) => (
+                  <View key={note.id} style={styles.noteItem}>
+                    <View style={styles.noteHeader}>
+                      <Text style={styles.noteAuthor}>{t('trainingStatus.noteBy', { author: note.authorName })}</Text>
+                      <Text style={styles.noteDate}>
+                        {new Date(note.createdAt).toLocaleDateString(isDE ? 'de-DE' : 'en-US', { month: 'short', day: 'numeric' })}
+                      </Text>
+                      {!note.sharedWithAthlete && (
+                        <View style={styles.privateChip}>
+                          <Text style={styles.privateChipText}>🔒</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.noteText}>{note.text}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
         )}
 
@@ -485,10 +533,21 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   notesSection: {
-    marginTop: Spacing.md,
-    paddingTop: Spacing.md,
+    marginTop: Spacing.sm,
+    paddingTop: Spacing.xs,
     borderTopWidth: 1,
     borderTopColor: Colors.borderLight,
+  },
+  notesToggleHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.xs,
+  },
+  notesToggleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
   },
   notesSectionTitle: {
     fontSize: FontSize.xs,
@@ -496,7 +555,37 @@ const styles = StyleSheet.create({
     color: Colors.textTertiary,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginBottom: Spacing.sm,
+  },
+  notesBadge: {
+    backgroundColor: Colors.primarySurface,
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    minWidth: 18,
+    alignItems: 'center',
+  },
+  notesBadgeText: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.bold,
+    color: Colors.primary,
+  },
+  notesToggleRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  notesLatestDate: {
+    fontSize: FontSize.xs,
+    color: Colors.textSecondary,
+    fontWeight: FontWeight.medium,
+  },
+  notesToggleChevron: {
+    fontSize: 10,
+    color: Colors.textTertiary,
+    marginLeft: 2,
+  },
+  notesList: {
+    marginTop: Spacing.xs,
   },
   noteItem: {
     backgroundColor: Colors.background,
