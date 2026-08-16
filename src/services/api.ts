@@ -191,27 +191,79 @@ export interface AuthResponse {
 }
 
 // ────────────────────────────────────────────────────────────
+// Cross-Platform Storage Helper
+// ────────────────────────────────────────────────────────────
+
+export const storage = {
+  async getItem(key: string): Promise<string | null> {
+    try {
+      if (Platform.OS === 'web') {
+        return typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null;
+      }
+      return await SecureStore.getItemAsync(key);
+    } catch {
+      return null;
+    }
+  },
+  async setItem(key: string, value: string): Promise<void> {
+    try {
+      if (Platform.OS === 'web') {
+        if (typeof localStorage !== 'undefined') localStorage.setItem(key, value);
+        return;
+      }
+      await SecureStore.setItemAsync(key, value);
+    } catch (e) {
+      console.warn(`Failed to save ${key} to storage:`, e);
+    }
+  },
+  async deleteItem(key: string): Promise<void> {
+    try {
+      if (Platform.OS === 'web') {
+        if (typeof localStorage !== 'undefined') localStorage.removeItem(key);
+        return;
+      }
+      await SecureStore.deleteItemAsync(key);
+    } catch (e) {
+      console.warn(`Failed to delete ${key} from storage:`, e);
+    }
+  },
+};
+
+// ────────────────────────────────────────────────────────────
 // HTTP Client Helper
 // ────────────────────────────────────────────────────────────
 
 let inMemoryToken: string | null = null;
 
 export const setAuthToken = (token: string | null) => {
-  inMemoryToken = token;
+  if (!token) {
+    inMemoryToken = null;
+  } else {
+    inMemoryToken = token.replace(/^Bearer\s+/i, '').trim();
+  }
 };
 
 export const getAuthToken = async (): Promise<string | null> => {
   if (inMemoryToken) return inMemoryToken;
   try {
-    const token = await SecureStore.getItemAsync(JWT_KEY);
-    if (token) inMemoryToken = token;
-    return token;
+    const token = await storage.getItem(JWT_KEY);
+    if (token) {
+      inMemoryToken = token.replace(/^Bearer\s+/i, '').trim();
+      return inMemoryToken;
+    }
+    return null;
   } catch {
     return inMemoryToken;
   }
 };
 
-class ApiError extends Error {
+export const clearAuthSession = async (): Promise<void> => {
+  inMemoryToken = null;
+  await storage.deleteItem(JWT_KEY);
+  await storage.deleteItem(ACTIVE_CLUB_KEY);
+};
+
+export class ApiError extends Error {
   status: number;
   constructor(message: string, status: number) {
     super(message);
@@ -220,15 +272,24 @@ class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = await getAuthToken();
+export interface RequestOptions extends RequestInit {
+  skipAuth?: boolean;
+}
+
+async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
   };
 
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+  if (!options.skipAuth) {
+    const token = await getAuthToken();
+    if (token) {
+      const cleanToken = token.replace(/^Bearer\s+/i, '').trim();
+      if (cleanToken) {
+        headers['Authorization'] = `Bearer ${cleanToken}`;
+      }
+    }
   }
 
   const url = `${API_BASE_URL}${path}`;
@@ -272,21 +333,30 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 export const api = {
   // ── Authentication ──
   async login(payload: LoginRequest): Promise<AuthResponse> {
-    const res = await request<AuthResponse>('/api/v1/auth/login', {
+    // Clear stale in-memory token before login request to prevent sending old auth headers
+    setAuthToken(null);
+    const res = await request<any>('/api/v1/auth/login', {
       method: 'POST',
       body: JSON.stringify(payload),
+      skipAuth: true,
     });
-    setAuthToken(res.token);
-    return res;
+    const rawToken = res?.token || res?.accessToken || res?.jwt || (typeof res === 'string' ? res : '');
+    const cleanToken = typeof rawToken === 'string' ? rawToken.replace(/^Bearer\s+/i, '').trim() : '';
+    setAuthToken(cleanToken);
+    return { token: cleanToken };
   },
 
   async registerWithInvite(payload: RegisterWithInviteRequest): Promise<AuthResponse> {
-    const res = await request<AuthResponse>('/api/v1/auth/register-invite', {
+    setAuthToken(null);
+    const res = await request<any>('/api/v1/auth/register-invite', {
       method: 'POST',
       body: JSON.stringify(payload),
+      skipAuth: true,
     });
-    setAuthToken(res.token);
-    return res;
+    const rawToken = res?.token || res?.accessToken || res?.jwt || (typeof res === 'string' ? res : '');
+    const cleanToken = typeof rawToken === 'string' ? rawToken.replace(/^Bearer\s+/i, '').trim() : '';
+    setAuthToken(cleanToken);
+    return { token: cleanToken };
   },
 
   // ── Users ──
@@ -426,7 +496,10 @@ export const api = {
   async createComment(athleteId: number | string, payload: CreateCommentRequest): Promise<CommentResponse> {
     return request<CommentResponse>(`/api/v1/athletes/${athleteId}/comments`, {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        ...payload,
+        athleteId: typeof payload.athleteId === 'number' ? payload.athleteId : Number(athleteId),
+      }),
     });
   },
 

@@ -5,10 +5,9 @@ import React, {
   useEffect,
   useReducer,
 } from 'react';
-import * as SecureStore from 'expo-secure-store';
 
-import { AuthState, ClubMembership, ClubRole, LoginCredentials, RegisterWithInvitePayload, User } from '../app/types/user';
-import { api, JWT_KEY, ACTIVE_CLUB_KEY, setAuthToken, UserProfileResponse } from '../services/api';
+import { AuthState, ClubMembership, ClubRole, LoginCredentials, RegisterWithInvitePayload, User, GlobalRole } from '../app/types/user';
+import { api, JWT_KEY, ACTIVE_CLUB_KEY, setAuthToken, storage, UserProfileResponse } from '../services/api';
 
 // ────────────────────────────────────────────────────────────
 // CONTEXT-TYP
@@ -67,12 +66,29 @@ const initialState: AuthState = {
 // USER PROFILE AGGREGATOR
 // ────────────────────────────────────────────────────────────
 async function buildUserFromProfile(profile: UserProfileResponse): Promise<User> {
-  const globalRole = profile.roles.includes('ROLE_ADMIN') ? 'ROLE_ADMIN' : 'ROLE_USER';
-  const memberships: ClubMembership[] = [];
+  const roles = Array.isArray(profile?.roles)
+    ? profile.roles
+    : profile?.roles
+    ? [profile.roles]
+    : (profile as any)?.globalRole
+    ? [(profile as any).globalRole]
+    : [];
 
-  if (profile.clubIds && profile.clubIds.length > 0) {
+  const globalRole: GlobalRole =
+    roles.includes('ROLE_ADMIN') || (profile as any)?.globalRole === 'ROLE_ADMIN'
+      ? 'ROLE_ADMIN'
+      : 'ROLE_USER';
+
+  const memberships: ClubMembership[] = [];
+  const clubIds: number[] = Array.isArray(profile?.clubIds)
+    ? profile.clubIds
+    : (profile as any)?.clubs
+    ? (profile as any).clubs
+    : [];
+
+  if (clubIds.length > 0) {
     await Promise.all(
-      profile.clubIds.map(async (clubId) => {
+      clubIds.map(async (clubId) => {
         try {
           const club = await api.getClubById(clubId);
           let memberRole: ClubRole = 'MEMBER';
@@ -80,13 +96,13 @@ async function buildUserFromProfile(profile: UserProfileResponse): Promise<User>
 
           try {
             const members = await api.getClubMembers(clubId);
-            const myMembership = members.find((m) => m.userId === profile.id);
+            const myMembership = members.find((m) => String(m.userId) === String(profile.id));
             if (myMembership) {
               memberRole = myMembership.clubRole;
-              joinedAt = myMembership.joinedAt;
+              joinedAt = myMembership.joinedAt || joinedAt;
             }
           } catch {
-            // Non-admin/trainer might have restricted permissions on members list
+            // Member list may be forbidden for standard members
           }
 
           memberships.push({
@@ -105,9 +121,9 @@ async function buildUserFromProfile(profile: UserProfileResponse): Promise<User>
 
   return {
     id: String(profile.id),
-    email: profile.email,
-    firstName: profile.firstName,
-    lastName: profile.lastName,
+    email: profile.email || '',
+    firstName: profile.firstName || '',
+    lastName: profile.lastName || '',
     age: profile.age,
     gender: profile.gender as any,
     globalRole,
@@ -125,7 +141,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Load profile and memberships helper
   const loadProfile = useCallback(async (token: string, preferredClubId?: string | null) => {
-    setAuthToken(token);
+    const cleanToken = token.replace(/^Bearer\s+/i, '').trim();
+    setAuthToken(cleanToken);
     const profile = await api.getMyProfile();
     const user = await buildUserFromProfile(profile);
     const activeClubId =
@@ -135,7 +152,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     dispatch({
       type: 'SET_AUTH',
-      payload: { user, token, activeClubId },
+      payload: { user, token: cleanToken, activeClubId },
     });
   }, []);
 
@@ -143,21 +160,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     async function bootstrap() {
       try {
-        const token = await SecureStore.getItemAsync(JWT_KEY);
-        const storedClubId = await SecureStore.getItemAsync(ACTIVE_CLUB_KEY);
-        if (token) {
+        const token = await storage.getItem(JWT_KEY);
+        const storedClubId = await storage.getItem(ACTIVE_CLUB_KEY);
+        if (token && token.trim()) {
           try {
-            await loadProfile(token, storedClubId);
+            await loadProfile(token.trim(), storedClubId);
             return;
           } catch (e) {
             console.warn('Stored token is invalid or expired:', e);
-            await SecureStore.deleteItemAsync(JWT_KEY).catch(() => {});
-            await SecureStore.deleteItemAsync(ACTIVE_CLUB_KEY).catch(() => {});
+            await storage.deleteItem(JWT_KEY);
+            await storage.deleteItem(ACTIVE_CLUB_KEY);
             setAuthToken(null);
           }
         }
       } catch (e) {
-        console.warn('SecureStore bootstrap error:', e);
+        console.warn('Storage bootstrap error:', e);
       }
       dispatch({ type: 'SET_LOADING', payload: false });
     }
@@ -169,9 +186,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       dispatch({ type: 'SET_LOADING', payload: true });
       try {
         const authRes = await api.login(credentials);
-        await SecureStore.setItemAsync(JWT_KEY, authRes.token);
+        if (!authRes.token) {
+          throw new Error('No authentication token received from server');
+        }
+        await storage.setItem(JWT_KEY, authRes.token);
         await loadProfile(authRes.token);
       } catch (e) {
+        setAuthToken(null);
+        await storage.deleteItem(JWT_KEY);
         dispatch({ type: 'SET_LOADING', payload: false });
         throw e;
       }
@@ -191,9 +213,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           age: payload.age,
           gender: payload.gender,
         });
-        await SecureStore.setItemAsync(JWT_KEY, authRes.token);
+        if (!authRes.token) {
+          throw new Error('No authentication token received from server');
+        }
+        await storage.setItem(JWT_KEY, authRes.token);
         await loadProfile(authRes.token);
       } catch (e) {
+        setAuthToken(null);
+        await storage.deleteItem(JWT_KEY);
         dispatch({ type: 'SET_LOADING', payload: false });
         throw e;
       }
@@ -204,19 +231,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     try {
       setAuthToken(null);
-      await SecureStore.deleteItemAsync(JWT_KEY);
-      await SecureStore.deleteItemAsync(ACTIVE_CLUB_KEY);
+      await storage.deleteItem(JWT_KEY);
+      await storage.deleteItem(ACTIVE_CLUB_KEY);
     } catch (e) {
-      console.warn('Logout SecureStore error:', e);
+      console.warn('Logout storage error:', e);
     }
     dispatch({ type: 'LOGOUT' });
   }, []);
 
   const switchClub = useCallback(async (clubId: string) => {
     try {
-      await SecureStore.setItemAsync(ACTIVE_CLUB_KEY, clubId);
+      await storage.setItem(ACTIVE_CLUB_KEY, clubId);
     } catch (e) {
-      console.warn('SwitchClub SecureStore error:', e);
+      console.warn('SwitchClub storage error:', e);
     }
     dispatch({ type: 'SET_ACTIVE_CLUB', payload: clubId });
   }, []);

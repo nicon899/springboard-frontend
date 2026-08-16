@@ -190,6 +190,7 @@ export default function TrainingStatusScreen() {
     try {
       const statusIdNum = noteModal.entryId ? Number(noteModal.entryId) : undefined;
       await api.createComment(targetAthleteId, {
+        athleteId: Number(targetAthleteId),
         content: noteText.trim(),
         sharedWithAthlete: noteShared,
         athleteDiveStatusId: isNaN(statusIdNum as number) ? undefined : statusIdNum,
