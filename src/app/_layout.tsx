@@ -1,18 +1,74 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
+import '../i18n'; // i18n-Initialisierung vor allem anderen
+import React, { useEffect } from 'react';
+import { Slot, SplashScreen, useRouter, useSegments } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { AuthProvider, useAuth } from '../context/AuthContext';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { Colors } from './constants/theme';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
-
+// Splash-Screen so lange anzeigen, bis Auth geladen ist
 SplashScreen.preventAutoHideAsync();
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+/**
+ * AppGate:
+ * 1. Hält Splash-Screen bis Auth-State geladen ist.
+ * 2. Navigiert nach Login/Logout automatisch zur richtigen Route.
+ */
+function AppGate() {
+  const { isLoading, user, isTrainerOrAdmin } = useAuth();
+  const router = useRouter();
+  const segments = useSegments();
+
+  useEffect(() => {
+    if (isLoading) return;
+    SplashScreen.hideAsync();
+
+    const inDrawer = segments[0] === '(drawer)';
+    const currentScreen = segments[1] as string | undefined;
+
+    if (!user) {
+      // Nicht eingeloggt → Auth-Screen
+      if (currentScreen !== 'auth') {
+        router.replace('/(drawer)/auth');
+      }
+      return;
+    }
+
+    // Eingeloggt und noch auf Auth-Screen → weiterleiten
+    if (currentScreen === 'auth' || !inDrawer) {
+      if (isTrainerOrAdmin()) {
+        router.replace('/(drawer)/trainer');
+      } else {
+        router.replace('/(drawer)/training-status');
+      }
+    }
+  }, [isLoading, user]);
+
+  if (isLoading) {
+    return (
+      <View style={styles.loader}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
+  }
+
+  return <Slot />;
+}
+
+export default function RootLayout() {
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
-    </ThemeProvider>
+    <AuthProvider>
+      <StatusBar style="light" />
+      <AppGate />
+    </AuthProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  loader: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.background,
+  },
+});
