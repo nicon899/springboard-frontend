@@ -11,7 +11,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
-import { api, DiveResponse } from '../../services/api';
+import { api, DiveExecutionResponse } from '../../services/api';
 import { searchDives, DIVE_GROUP_NAMES, mapApiDivesToDefinitions } from '../constants/diveData';
 import { DiveDefinition, DiveHeight, ExecutionPosition } from '../types/dive';
 import {
@@ -50,9 +50,9 @@ export default function DiveSearchScreen() {
     async function loadCatalogDives() {
       setIsLoading(true);
       try {
-        const apiDives: DiveResponse[] = await api.getAllDives();
-        if (isMounted && apiDives && apiDives.length > 0) {
-          const merged = mapApiDivesToDefinitions(apiDives);
+        const apiExecutions: DiveExecutionResponse[] = await api.getAllDiveExecutions();
+        if (isMounted && apiExecutions && apiExecutions.length > 0) {
+          const merged = mapApiDivesToDefinitions(apiExecutions);
           setDives(merged);
         }
       } catch (e) {

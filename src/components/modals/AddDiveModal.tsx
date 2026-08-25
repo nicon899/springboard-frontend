@@ -11,7 +11,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { DiveDefinition, DiveHeight } from '../../app/types/dive';
 import { DIVE_GROUP_NAMES, mapApiDivesToDefinitions } from '../../app/constants/diveData';
-import { api, DiveResponse } from '../../services/api';
+import { api, DiveExecutionResponse } from '../../services/api';
 import {
   BorderRadius,
   Colors,
@@ -44,9 +44,9 @@ export default function AddDiveModal({
     let isMounted = true;
     async function loadCatalog() {
       try {
-        const apiDives: DiveResponse[] = await api.getAllDives();
-        if (isMounted && apiDives && apiDives.length > 0) {
-          setDives(mapApiDivesToDefinitions(apiDives));
+        const apiExecutions: DiveExecutionResponse[] = await api.getAllDiveExecutions();
+        if (isMounted && apiExecutions && apiExecutions.length > 0) {
+          setDives(mapApiDivesToDefinitions(apiExecutions));
         }
       } catch (e) {
         console.warn('Failed to load dives from API in AddDiveModal:', e);

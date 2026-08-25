@@ -1,5 +1,5 @@
 import { DiveDefinition, DiveGroup } from '../types/dive';
-import { DiveResponse } from '../../services/api';
+import { DiveExecutionResponse, BACKEND_TO_HEIGHT } from '../../services/api';
 
 export const DIVE_GROUP_NAMES: Record<number, { de: string; en: string }> = {
   1: { de: 'Vorwärts', en: 'Forward' },
@@ -11,19 +11,20 @@ export const DIVE_GROUP_NAMES: Record<number, { de: string; en: string }> = {
 };
 
 /**
- * Transforms API dive responses into DiveDefinition objects purely from backend data.
+ * Transforms API dive execution responses into DiveDefinition objects.
+ * Each DiveExecutionResponse represents one (dive × execution × height) combination.
  */
-export function mapApiDivesToDefinitions(apiDives: DiveResponse[]): DiveDefinition[] {
+export function mapApiDivesToDefinitions(apiExecutions: DiveExecutionResponse[]): DiveDefinition[] {
   const mapByCode = new Map<string, DiveDefinition>();
 
-  for (const item of apiDives) {
-    let existing = mapByCode.get(item.code);
+  for (const item of apiExecutions) {
+    let existing = mapByCode.get(item.diveCode);
     if (!existing) {
       existing = {
-        code: item.code,
+        code: item.diveCode,
         groupNumber: (item.groupNumber || 1) as DiveGroup,
-        nameDe: item.nameDe || item.code,
-        nameEn: item.nameEn || item.code,
+        nameDe: item.nameDe || item.diveCode,
+        nameEn: item.nameEn || item.diveCode,
         difficulties: {
           A: {},
           B: {},
@@ -31,7 +32,7 @@ export function mapApiDivesToDefinitions(apiDives: DiveResponse[]): DiveDefiniti
           D: {},
         },
       };
-      mapByCode.set(item.code, existing);
+      mapByCode.set(item.diveCode, existing);
     }
 
     if (item.nameDe) existing.nameDe = item.nameDe;
@@ -42,8 +43,10 @@ export function mapApiDivesToDefinitions(apiDives: DiveResponse[]): DiveDefiniti
       if (!existing.difficulties[item.execution]) {
         existing.difficulties[item.execution] = {};
       }
-      // Populate difficulty (default across heights or 1m/3m if specified)
-      existing.difficulties[item.execution]['1m'] = item.degreeOfDifficulty;
+      const uiHeight = BACKEND_TO_HEIGHT[item.height];
+      if (uiHeight) {
+        existing.difficulties[item.execution][uiHeight] = item.degreeOfDifficulty;
+      }
     }
   }
 

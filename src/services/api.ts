@@ -1,5 +1,5 @@
-import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 
 export const JWT_KEY = 'springboard_jwt';
 export const ACTIVE_CLUB_KEY = 'springboard_active_club';
@@ -104,35 +104,55 @@ export interface InvitationResponse {
 export interface DiveResponse {
   id: number;
   code: string;
-  execution: 'A' | 'B' | 'C' | 'D';
   nameDe: string;
   nameEn: string;
   groupNumber: number;
-  degreeOfDifficulty: number;
 }
 
 export interface CreateDiveRequest {
   code: string;
-  execution: 'A' | 'B' | 'C' | 'D';
   nameDe: string;
   nameEn: string;
   groupNumber: number;
-  degreeOfDifficulty: number;
 }
 
 export interface UpdateDiveRequest {
   code: string;
-  execution: 'A' | 'B' | 'C' | 'D';
   nameDe: string;
   nameEn: string;
   groupNumber: number;
+}
+
+export interface DiveExecutionResponse {
+  id: number;
+  diveId: number;
+  diveCode: string;
+  nameDe: string;
+  nameEn: string;
+  groupNumber: number;
+  execution: 'A' | 'B' | 'C' | 'D';
+  height: BackendHeight;
+  degreeOfDifficulty: number;
+}
+
+export interface CreateDiveExecutionRequest {
+  diveId: number;
+  execution: 'A' | 'B' | 'C' | 'D';
+  height: BackendHeight;
+  degreeOfDifficulty: number;
+}
+
+export interface UpdateDiveExecutionRequest {
+  diveId: number;
+  execution: 'A' | 'B' | 'C' | 'D';
+  height: BackendHeight;
   degreeOfDifficulty: number;
 }
 
 export interface AthleteDiveStatusResponse {
   id: number;
   athleteId: number;
-  diveId: number;
+  diveExecutionId: number;
   diveCode: string;
   execution: 'A' | 'B' | 'C' | 'D';
   diveName: string;
@@ -143,9 +163,7 @@ export interface AthleteDiveStatusResponse {
 }
 
 export interface UpdateDiveStatusRequest {
-  diveId: number;
-  execution: 'A' | 'B' | 'C' | 'D';
-  height: BackendHeight;
+  diveExecutionId: number;
   status: 'PLANNED' | 'LEARNING' | 'MASTERED';
 }
 
@@ -470,6 +488,37 @@ export const api = {
 
   async deleteDive(id: number | string): Promise<void> {
     return request<void>(`/api/v1/dives/${id}`, { method: 'DELETE' });
+  },
+
+  // ── Dive Executions ──
+  async getAllDiveExecutions(): Promise<DiveExecutionResponse[]> {
+    return request<DiveExecutionResponse[]>('/api/v1/dive-executions');
+  },
+
+  async getDiveExecutionById(id: number | string): Promise<DiveExecutionResponse> {
+    return request<DiveExecutionResponse>(`/api/v1/dive-executions/${id}`);
+  },
+
+  async getDiveExecutionsByDiveId(diveId: number | string): Promise<DiveExecutionResponse[]> {
+    return request<DiveExecutionResponse[]>(`/api/v1/dive-executions/by-dive/${diveId}`);
+  },
+
+  async createDiveExecution(payload: CreateDiveExecutionRequest): Promise<DiveExecutionResponse> {
+    return request<DiveExecutionResponse>('/api/v1/dive-executions', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async updateDiveExecution(id: number | string, payload: UpdateDiveExecutionRequest): Promise<DiveExecutionResponse> {
+    return request<DiveExecutionResponse>(`/api/v1/dive-executions/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async deleteDiveExecution(id: number | string): Promise<void> {
+    return request<void>(`/api/v1/dive-executions/${id}`, { method: 'DELETE' });
   },
 
   // ── Athlete Dives ──

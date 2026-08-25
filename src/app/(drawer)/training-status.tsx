@@ -33,7 +33,7 @@ import {
   HEIGHT_TO_BACKEND,
   AthleteDiveStatusResponse,
   CommentResponse,
-  DiveResponse,
+  DiveExecutionResponse,
 } from '../../services/api';
 
 const HEIGHTS: DiveHeight[] = ['1m', '3m', '5m', '7.5m', '10m'];
@@ -52,15 +52,14 @@ export default function TrainingStatusScreen() {
 
   const [selectedHeight, setSelectedHeight] = useState<DiveHeight>('1m');
   const [entries, setEntries] = useState<AthleteTrainingEntry[]>([]);
-  const [catalogDives, setCatalogDives] = useState<DiveResponse[]>([]);
+  const [catalogExecutions, setCatalogExecutions] = useState<DiveExecutionResponse[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   // Modals
   const [statusModal, setStatusModal] = useState<{
     visible: boolean;
     entryId: string;
-    diveId?: number;
-    execution?: 'A' | 'B' | 'C' | 'D';
+    diveExecutionId?: number;
     current: DiveStatus;
   }>({
     visible: false,
@@ -82,7 +81,7 @@ export default function TrainingStatusScreen() {
 
   const isDE = i18n.language === 'de';
 
-  // Load catalog dives & athlete dives from API
+  // Load catalog executions & athlete dives from API
   const loadData = useCallback(async () => {
     if (!targetAthleteId) return;
     setIsLoading(true);
@@ -90,10 +89,10 @@ export default function TrainingStatusScreen() {
       const [divesRes, commentsRes, catalogRes] = await Promise.all([
         api.getAthleteDives(targetAthleteId).catch(() => [] as AthleteDiveStatusResponse[]),
         api.getAthleteComments(targetAthleteId).catch(() => [] as CommentResponse[]),
-        api.getAllDives().catch(() => [] as DiveResponse[]),
+        api.getAllDiveExecutions().catch(() => [] as DiveExecutionResponse[]),
       ]);
 
-      setCatalogDives(catalogRes);
+      setCatalogExecutions(catalogRes);
 
       const mappedEntries: AthleteTrainingEntry[] = divesRes.map((d) => {
         const diveNotes: TrainerNote[] = commentsRes
@@ -111,6 +110,7 @@ export default function TrainingStatusScreen() {
           id: String(d.id),
           athleteId: String(d.athleteId),
           diveCode: d.diveCode,
+          diveExecutionId: d.diveExecutionId,
           height: BACKEND_TO_HEIGHT[d.height] || '1m',
           status: d.status,
           notes: diveNotes,
@@ -145,8 +145,8 @@ export default function TrainingStatusScreen() {
   }, [currentEntries]);
 
   const getDiveDefinition = useCallback(
-    (code: string): DiveResponse | undefined => catalogDives.find((d) => d.code === code),
-    [catalogDives]
+    (code: string): DiveExecutionResponse | undefined => catalogExecutions.find((d) => d.diveCode === code),
+    [catalogExecutions]
   );
 
   const handleStatusChange = async (status: DiveStatus) => {
@@ -155,18 +155,16 @@ export default function TrainingStatusScreen() {
 
     setStatusModal((s) => ({ ...s, visible: false }));
 
-    // Find dive catalog ID
-    let diveId = statusModal.diveId;
-    if (!diveId) {
-      const catalogItem = catalogDives.find((d) => d.code === targetEntry.diveCode);
-      diveId = catalogItem ? catalogItem.id : 1;
+    // Use the diveExecutionId stored on the entry (from AthleteDiveStatusResponse)
+    const diveExecutionId = (targetEntry as any).diveExecutionId ?? statusModal.diveExecutionId;
+    if (!diveExecutionId) {
+      Alert.alert(t('common.error'), 'Could not find dive execution ID');
+      return;
     }
 
     try {
       await api.updateAthleteDive(targetAthleteId, {
-        diveId,
-        execution: statusModal.execution || 'A',
-        height: HEIGHT_TO_BACKEND[targetEntry.height],
+        diveExecutionId,
         status,
       });
       await loadData();
@@ -178,13 +176,23 @@ export default function TrainingStatusScreen() {
   const handleAddDive = async (dive: DiveDefinition) => {
     if (!targetAthleteId) return;
     try {
-      const catalogItem = catalogDives.find((d) => d.code === dive.code);
-      const diveId = catalogItem ? catalogItem.id : 1;
+      // Find execution matching this dive code + selected height (prefer 'A' execution)
+      const backendHeight = HEIGHT_TO_BACKEND[selectedHeight];
+      const execution = catalogExecutions.find(
+        (e) => e.diveCode === dive.code && e.height === backendHeight && e.execution === 'A'
+      ) ?? catalogExecutions.find(
+        (e) => e.diveCode === dive.code && e.height === backendHeight
+      ) ?? catalogExecutions.find(
+        (e) => e.diveCode === dive.code
+      );
+
+      if (!execution) {
+        Alert.alert(t('common.error'), 'No execution found for this dive at the selected height');
+        return;
+      }
 
       await api.updateAthleteDive(targetAthleteId, {
-        diveId,
-        execution: 'A',
-        height: HEIGHT_TO_BACKEND[selectedHeight],
+        diveExecutionId: execution.id,
         status: 'PLANNED',
       });
       await loadData();
