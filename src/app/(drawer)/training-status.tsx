@@ -10,7 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useLocalSearchParams, useNavigation } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import StatusBadge from '../../components/ui/StatusBadge';
@@ -34,6 +34,7 @@ import {
   AthleteDiveStatusResponse,
   CommentResponse,
   DiveExecutionResponse,
+  RoutineResponse,
 } from '../../services/api';
 
 const HEIGHTS: DiveHeight[] = ['1m', '3m', '5m', '7.5m', '10m'];
@@ -44,6 +45,7 @@ export default function TrainingStatusScreen() {
   const { user, isTrainerOrAdmin } = useAuth();
   const params = useLocalSearchParams<{ athleteId?: string; athleteName?: string }>();
   const navigation = useNavigation();
+  const router = useRouter();
 
   const isTrainer = isTrainerOrAdmin();
   const targetAthleteId = params.athleteId ?? user?.id ?? '';
@@ -54,6 +56,7 @@ export default function TrainingStatusScreen() {
   const [entries, setEntries] = useState<AthleteTrainingEntry[]>([]);
   const [catalogExecutions, setCatalogExecutions] = useState<DiveExecutionResponse[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [routines, setRoutines] = useState<RoutineResponse[]>([]);
 
   // Modals
   const [statusModal, setStatusModal] = useState<{
@@ -86,13 +89,15 @@ export default function TrainingStatusScreen() {
     if (!targetAthleteId) return;
     setIsLoading(true);
     try {
-      const [divesRes, commentsRes, catalogRes] = await Promise.all([
+      const [divesRes, commentsRes, catalogRes, routinesRes] = await Promise.all([
         api.getAthleteDives(targetAthleteId).catch(() => [] as AthleteDiveStatusResponse[]),
         api.getAthleteComments(targetAthleteId).catch(() => [] as CommentResponse[]),
         api.getAllDiveExecutions().catch(() => [] as DiveExecutionResponse[]),
+        api.getRoutinesByUser(targetAthleteId).catch(() => [] as RoutineResponse[]),
       ]);
 
       setCatalogExecutions(catalogRes);
+      setRoutines(routinesRes);
 
       const mappedEntries: AthleteTrainingEntry[] = divesRes.map((d) => {
         const diveNotes: TrainerNote[] = commentsRes
@@ -344,6 +349,31 @@ export default function TrainingStatusScreen() {
         </View>
       )}
 
+      {/* Routinen-Übersicht */}
+      <TouchableOpacity
+        style={styles.routinesBanner}
+        onPress={() =>
+          router.push({
+            pathname: '/(drawer)/routines',
+            params: params.athleteId
+              ? { athleteId: params.athleteId, athleteName: params.athleteName }
+              : {},
+          } as any)
+        }
+        activeOpacity={0.8}
+      >
+        <View style={styles.routinesBannerLeft}>
+          <Text style={styles.routinesBannerEmoji}>📋</Text>
+          <View>
+            <Text style={styles.routinesBannerTitle}>Routinen (Serien)</Text>
+            <Text style={styles.routinesBannerSub}>
+              {routines.length} {routines.length === 1 ? 'Routine' : 'Routinen'} vorhanden
+            </Text>
+          </View>
+        </View>
+        <Text style={styles.routinesBannerArrow}>›</Text>
+      </TouchableOpacity>
+
       {/* Höhen-Auswahl */}
       <ScrollView
         horizontal
@@ -460,6 +490,40 @@ export default function TrainingStatusScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
+  routinesBanner: {
+    marginHorizontal: Spacing.lg,
+    marginTop: Spacing.md,
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    ...Shadows.sm,
+  },
+  routinesBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  routinesBannerEmoji: { fontSize: 24 },
+  routinesBannerTitle: {
+    fontSize: FontSize.md,
+    fontWeight: FontWeight.semiBold,
+    color: Colors.textPrimary,
+  },
+  routinesBannerSub: {
+    fontSize: FontSize.xs,
+    color: Colors.textTertiary,
+    marginTop: 2,
+  },
+  routinesBannerArrow: {
+    fontSize: 24,
+    color: Colors.primary,
+    fontWeight: FontWeight.bold,
+  },
   athleteBanner: {
     backgroundColor: Colors.accent,
     paddingHorizontal: Spacing.lg,

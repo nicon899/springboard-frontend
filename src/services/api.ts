@@ -190,6 +190,89 @@ export interface UpdateCommentRequest {
   sharedWithAthlete: boolean;
 }
 
+// ── Age Categories (Altersklassen) ──
+export interface AgeCategoryResponse {
+  id: number;
+  clubId: number;
+  clubName: string;
+  name: string;
+  fromYearOffset: number;
+  toYearOffset: number;
+}
+
+export interface CreateAgeCategoryRequest {
+  clubId: number;
+  name: string;
+  fromYearOffset: number;
+  toYearOffset: number;
+}
+
+export interface UpdateAgeCategoryRequest {
+  name?: string;
+  fromYearOffset?: number;
+  toYearOffset?: number;
+}
+
+// ── Routine Specifications (Serienspezifikationen) ──
+export interface RoutineSpecificationResponse {
+  id: number;
+  clubId: number;
+  clubName: string;
+  name: string;
+  numberOfDives: number;
+  numberOfGroups: number;
+  juniorTableAllowed: boolean;
+  maxDifficultyScore: number;
+  ageCategory?: AgeCategoryResponse;
+  gender?: 'MALE' | 'FEMALE' | 'DIVERSE' | 'ALL';
+  beginner: boolean;
+}
+
+export interface CreateRoutineSpecificationRequest {
+  clubId: number;
+  name?: string;
+  numberOfDives?: number;
+  numberOfGroups?: number;
+  juniorTableAllowed?: boolean;
+  maxDifficultyScore?: number;
+  ageCategoryId?: number;
+  gender?: 'MALE' | 'FEMALE' | 'DIVERSE' | 'ALL';
+  beginner?: boolean;
+}
+
+export interface UpdateRoutineSpecificationRequest {
+  name?: string;
+  numberOfDives?: number;
+  numberOfGroups?: number;
+  juniorTableAllowed?: boolean;
+  maxDifficultyScore?: number;
+  ageCategoryId?: number;
+  gender?: 'MALE' | 'FEMALE' | 'DIVERSE' | 'ALL';
+  beginner?: boolean;
+}
+
+// ── Routines (Serien) ──
+export interface RoutineResponse {
+  id: number;
+  index: number;
+  displayName?: string;
+  userId: number;
+  userFullName: string;
+  template?: RoutineSpecificationResponse;
+  diveExecutions: DiveExecutionResponse[];
+}
+
+export interface CreateRoutineRequest {
+  userId: number;
+  specificationId?: number;
+  displayName?: string;
+}
+
+export interface UpdateRoutineRequest {
+  specificationId?: number;
+  displayName?: string;
+}
+
 export interface LoginRequest {
   email: string;
   password: string;
@@ -562,4 +645,86 @@ export const api = {
   async deleteComment(athleteId: number | string, commentId: number | string): Promise<void> {
     return request<void>(`/api/v1/athletes/${athleteId}/comments/${commentId}`, { method: 'DELETE' });
   },
+
+  // ── Routine Specifications (Serienspezifikationen) ──
+  async getSpecificationsByClub(clubId: number | string): Promise<RoutineSpecificationResponse[]> {
+    return request<RoutineSpecificationResponse[]>(`/api/v1/routine-specifications/club/${clubId}`);
+  },
+
+  async getSpecificationById(id: number | string): Promise<RoutineSpecificationResponse> {
+    return request<RoutineSpecificationResponse>(`/api/v1/routine-specifications/${id}`);
+  },
+
+  async createRoutineSpecification(payload: CreateRoutineSpecificationRequest): Promise<RoutineSpecificationResponse> {
+    return request<RoutineSpecificationResponse>('/api/v1/routine-specifications', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async updateRoutineSpecification(id: number | string, payload: UpdateRoutineSpecificationRequest): Promise<RoutineSpecificationResponse> {
+    return request<RoutineSpecificationResponse>(`/api/v1/routine-specifications/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async deleteRoutineSpecification(id: number | string): Promise<void> {
+    return request<void>(`/api/v1/routine-specifications/${id}`, { method: 'DELETE' });
+  },
+
+  // ── Routines (Serien) ──
+  async getRoutinesByUser(userId: number | string): Promise<RoutineResponse[]> {
+    return request<RoutineResponse[]>(`/api/v1/routines/user/${userId}`);
+  },
+
+  async getRoutineById(id: number | string): Promise<RoutineResponse> {
+    return request<RoutineResponse>(`/api/v1/routines/${id}`);
+  },
+
+  async createRoutine(payload: CreateRoutineRequest): Promise<RoutineResponse> {
+    return request<RoutineResponse>('/api/v1/routines', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async updateRoutine(id: number | string, payload: UpdateRoutineRequest): Promise<RoutineResponse> {
+    return request<RoutineResponse>(`/api/v1/routines/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async deleteRoutine(id: number | string): Promise<void> {
+    return request<void>(`/api/v1/routines/${id}`, { method: 'DELETE' });
+  },
+
+  // ── Age Categories (Altersklassen) ──
+  async getAgeCategoriesByClub(clubId: number | string): Promise<AgeCategoryResponse[]> {
+    return request<AgeCategoryResponse[]>(`/api/v1/age-categories/club/${clubId}/all`);
+  },
+
+  async getAgeCategoryById(id: number | string): Promise<AgeCategoryResponse> {
+    return request<AgeCategoryResponse>(`/api/v1/age-categories/${id}`);
+  },
+
+  async createAgeCategory(payload: CreateAgeCategoryRequest): Promise<AgeCategoryResponse> {
+    return request<AgeCategoryResponse>('/api/v1/age-categories', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async updateAgeCategory(id: number | string, payload: UpdateAgeCategoryRequest): Promise<AgeCategoryResponse> {
+    return request<AgeCategoryResponse>(`/api/v1/age-categories/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async deleteAgeCategory(id: number | string): Promise<void> {
+    return request<void>(`/api/v1/age-categories/${id}`, { method: 'DELETE' });
+  },
 };
+

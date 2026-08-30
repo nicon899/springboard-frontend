@@ -200,6 +200,27 @@ export default function DrawerLayout() {
         }}
       />
       <Drawer.Screen
+        name="routine-specifications"
+        options={{
+          title: 'Serienspezifikationen',
+          drawerItemStyle: styles.hidden,
+        }}
+      />
+      <Drawer.Screen
+        name="routines"
+        options={{
+          title: 'Routinen',
+          drawerItemStyle: styles.hidden,
+        }}
+      />
+      <Drawer.Screen
+        name="age-categories"
+        options={{
+          title: 'Altersklassen',
+          drawerItemStyle: styles.hidden,
+        }}
+      />
+      <Drawer.Screen
         name="index"
         options={{ drawerItemStyle: styles.hidden, title: '' }}
       />

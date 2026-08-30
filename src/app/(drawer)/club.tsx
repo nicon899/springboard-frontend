@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import InviteModal from '../../components/modals/InviteModal';
@@ -29,10 +30,13 @@ const ROLE_COLORS: Record<ClubRole, string> = {
 
 export default function ClubScreen() {
   const { t } = useTranslation();
-  const { user, activeClubId, activeClubMembership, switchClub, canManageInvites } = useAuth();
+  const { user, activeClubId, activeClubMembership, switchClub, canManageInvites, isTrainerOrAdmin } = useAuth();
+  const router = useRouter();
   const [inviteModalVisible, setInviteModalVisible] = useState(false);
   const [clubDetails, setClubDetails] = useState<ClubResponse | null>(null);
   const [memberCount, setMemberCount] = useState<number | null>(null);
+
+  const canManageSpecs = isTrainerOrAdmin();
 
   React.useEffect(() => {
     if (!activeClubId) return;
@@ -120,6 +124,38 @@ export default function ClubScreen() {
               </View>
             </TouchableOpacity>
           ))}
+        </View>
+      )}
+
+      {/* Serienspezifikationen (für Trainer & Admins) */}
+      {canManageSpecs && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Serienspezifikationen</Text>
+          <TouchableOpacity
+            style={styles.specsBtn}
+            onPress={() => router.push('/(drawer)/routine-specifications' as any)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.specsBtnIcon}>📋</Text>
+            <View style={styles.specsBtnInfo}>
+              <Text style={styles.specsBtnLabel}>Serienspezifikationen verwalten</Text>
+              <Text style={styles.specsBtnSub}>Rahmenbedingungen für Routinen festlegen</Text>
+            </View>
+            <Text style={styles.specsBtnArrow}>›</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.specsBtn, { marginTop: Spacing.sm }]}
+            onPress={() => router.push('/(drawer)/age-categories' as any)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.specsBtnIcon}>🎂</Text>
+            <View style={styles.specsBtnInfo}>
+              <Text style={styles.specsBtnLabel}>Altersklassen verwalten</Text>
+              <Text style={styles.specsBtnSub}>Jahrgangsbereiche für Spezifikationen</Text>
+            </View>
+            <Text style={styles.specsBtnArrow}>›</Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -327,5 +363,32 @@ const styles = StyleSheet.create({
   memberSince: {
     fontSize: FontSize.sm,
     color: Colors.textSecondary,
+  },
+  specsBtn: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    ...Shadows.sm,
+  },
+  specsBtnIcon: { fontSize: 22, marginRight: Spacing.md },
+  specsBtnInfo: { flex: 1 },
+  specsBtnLabel: {
+    fontSize: FontSize.md,
+    fontWeight: FontWeight.semiBold,
+    color: Colors.textPrimary,
+  },
+  specsBtnSub: {
+    fontSize: FontSize.xs,
+    color: Colors.textTertiary,
+    marginTop: 2,
+  },
+  specsBtnArrow: {
+    fontSize: 24,
+    color: Colors.primary,
+    fontWeight: FontWeight.bold,
   },
 });
