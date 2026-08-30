@@ -29,7 +29,8 @@
     "club": "Club",
     "routineSpecifications": "Routine Specifications",
     "routines": "Routines",
-    "ageCategories": "Age Categories"
+    "ageCategories": "Age Categories",
+    "profile": "Profile"
   },
   "auth": {
     "login": "Sign In",

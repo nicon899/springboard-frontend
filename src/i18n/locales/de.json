@@ -29,7 +29,8 @@
     "club": "Verein",
     "routineSpecifications": "Serienspezifikationen",
     "routines": "Routinen",
-    "ageCategories": "Altersklassen"
+    "ageCategories": "Altersklassen",
+    "profile": "Profil"
   },
   "auth": {
     "login": "Anmelden",
