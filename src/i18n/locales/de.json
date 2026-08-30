@@ -284,6 +284,7 @@
       "updateSuccess": "Routine aktualisiert",
       "deleteSuccess": "Routine „{{name}}“ gelöscht",
       "addDiveSuccess": "Sprung {{dive}} hinzugefügt",
+      "replaceDiveSuccess": "Sprung {{oldDive}} durch {{dive}} ersetzt",
       "removeDiveSuccess": "Sprung entfernt",
       "reorderSuccess": "Reihenfolge erfolgreich gespeichert"
     },
@@ -319,6 +320,10 @@
       "showAllBtn": "Alle Sprünge anzeigen",
       "alreadyInRoutine": "Bereits in Routine",
       "athleteDiveBadge": "Sportler"
+    },
+    "replaceDiveModal": {
+      "title": "Sprung ersetzen",
+      "subtitle": "Ersetzt „{{oldDive}}“ in {{name}}"
     },
     "validationBadges": {
       "ROUTINE_DUPLICATE_DIVE_NUMBER": "In Routine",

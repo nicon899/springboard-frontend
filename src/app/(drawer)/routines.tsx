@@ -58,13 +58,29 @@ export interface DiveValidationResult {
 
 export function validateDiveForRoutine(
   routine: RoutineResponse | null | undefined,
-  candidate: DiveExecutionResponse
+  candidate: DiveExecutionResponse,
+  replaceDiveExecutionId?: number | null
 ): DiveValidationResult {
   if (!routine) return { isValid: true };
 
-  const existing = routine.diveExecutions || [];
+  const allExisting = routine.diveExecutions || [];
+  const existing = replaceDiveExecutionId
+    ? allExisting.filter((de) => de.id !== replaceDiveExecutionId)
+    : allExisting;
 
-  // 1. Duplicate dive number (irrespective of execution/position)
+  // If candidate is the exact same dive execution currently placed at this position
+  if (
+    replaceDiveExecutionId &&
+    allExisting.some((de) => de.id === replaceDiveExecutionId && de.id === candidate.id)
+  ) {
+    return {
+      isValid: false,
+      reasonKey: 'ROUTINE_DUPLICATE_DIVE_NUMBER',
+      params: { diveCode: candidate.diveCode },
+    };
+  }
+
+  // 1. Duplicate dive number (irrespective of execution/position) among remaining dives
   const isDuplicate = existing.some(
     (de) => de.diveCode.toLowerCase() === candidate.diveCode.toLowerCase()
   );
@@ -289,6 +305,11 @@ export default function RoutinesScreen() {
   // Add dive modal state
   const [addDiveModalVisible, setAddDiveModalVisible] = useState(false);
   const [targetRoutineForAdd, setTargetRoutineForAdd] = useState<RoutineResponse | null>(null);
+  const [replaceTargetDive, setReplaceTargetDive] = useState<{
+    diveExecutionId: number;
+    diveName: string;
+    index: number;
+  } | null>(null);
   const [diveSearchQuery, setDiveSearchQuery] = useState('');
   const [selectedHeightFilter, setSelectedHeightFilter] = useState<string>('ALL');
   const [selectedGroupFilter, setSelectedGroupFilter] = useState<number | null>(null);
@@ -452,6 +473,22 @@ export default function RoutinesScreen() {
   // ── Sprung zu Routine hinzufügen ──
   const openAddDiveModal = (routine: RoutineResponse) => {
     setTargetRoutineForAdd(routine);
+    setReplaceTargetDive(null);
+    setDiveSearchQuery('');
+    setSelectedGroupFilter(null);
+    setAddDiveModalVisible(true);
+    loadCatalog();
+  };
+
+  // ── Sprung in Routine ersetzen ──
+  const openReplaceDiveModal = (
+    routine: RoutineResponse,
+    diveExecutionId: number,
+    diveName: string,
+    index: number
+  ) => {
+    setTargetRoutineForAdd(routine);
+    setReplaceTargetDive({ diveExecutionId, diveName, index });
     setDiveSearchQuery('');
     setSelectedGroupFilter(null);
     setAddDiveModalVisible(true);
@@ -461,8 +498,12 @@ export default function RoutinesScreen() {
   const handleAddDive = async (execution: DiveExecutionResponse) => {
     if (!targetRoutineForAdd) return;
 
-    // Validate dive against all routine and spec constraints
-    const validation = validateDiveForRoutine(targetRoutineForAdd, execution);
+    // Validate dive against all routine and spec constraints (taking replace into account)
+    const validation = validateDiveForRoutine(
+      targetRoutineForAdd,
+      execution,
+      replaceTargetDive?.diveExecutionId
+    );
     if (!validation.isValid) {
       const errorMsg = validation.reasonKey
         ? t(`routines.errors.${validation.reasonKey}`, {
@@ -476,21 +517,67 @@ export default function RoutinesScreen() {
 
     setIsAddingDiveId(execution.id);
     try {
-      const updatedRoutine = await api.addDiveToRoutine(targetRoutineForAdd.id, {
-        diveExecutionId: execution.id,
-      });
-      setRoutines((prev) =>
-        prev.map((r) => (r.id === updatedRoutine.id ? updatedRoutine : r))
-      );
-      setTargetRoutineForAdd(updatedRoutine);
-      setAddDiveModalVisible(false);
-      showToast(
-        t('routines.toasts.addDiveSuccess', {
-          dive: `${execution.diveCode}${execution.execution}`,
-          defaultValue: `Sprung ${execution.diveCode}${execution.execution} hinzugefügt`,
-        }),
-        'success'
-      );
+      if (replaceTargetDive) {
+        // REPLACE FLOW
+        const currentExecutionIds = targetRoutineForAdd.diveExecutions.map((de) => de.id);
+        const replaceIdx = replaceTargetDive.index;
+
+        // 1. Remove old dive
+        await api.removeDiveFromRoutine(targetRoutineForAdd.id, replaceTargetDive.diveExecutionId);
+        // 2. Add new dive
+        const afterAdd = await api.addDiveToRoutine(targetRoutineForAdd.id, {
+          diveExecutionId: execution.id,
+        });
+
+        // 3. Reorder if replaced dive was not the last element
+        const newIdsWithoutOld = currentExecutionIds.filter(
+          (id) => id !== replaceTargetDive.diveExecutionId
+        );
+        newIdsWithoutOld.splice(replaceIdx, 0, execution.id);
+
+        let finalRoutine = afterAdd;
+        const afterAddIds = afterAdd.diveExecutions.map((de) => de.id);
+        const isOrderSame =
+          afterAddIds.length === newIdsWithoutOld.length &&
+          afterAddIds.every((id, idx) => id === newIdsWithoutOld[idx]);
+
+        if (!isOrderSame) {
+          finalRoutine = await api.reorderDivesInRoutine(targetRoutineForAdd.id, newIdsWithoutOld);
+        }
+
+        setRoutines((prev) =>
+          prev.map((r) => (r.id === finalRoutine.id ? finalRoutine : r))
+        );
+        setTargetRoutineForAdd(finalRoutine);
+        setAddDiveModalVisible(false);
+        const oldName = replaceTargetDive.diveName;
+        setReplaceTargetDive(null);
+        showToast(
+          t('routines.toasts.replaceDiveSuccess', {
+            dive: `${execution.diveCode}${execution.execution}`,
+            oldDive: oldName,
+            defaultValue: `Sprung ${oldName} durch ${execution.diveCode}${execution.execution} ersetzt`,
+          }),
+          'success'
+        );
+      } else {
+        // ADD FLOW
+        const updatedRoutine = await api.addDiveToRoutine(targetRoutineForAdd.id, {
+          diveExecutionId: execution.id,
+        });
+        setRoutines((prev) =>
+          prev.map((r) => (r.id === updatedRoutine.id ? updatedRoutine : r))
+        );
+        setTargetRoutineForAdd(updatedRoutine);
+        setAddDiveModalVisible(false);
+        showToast(
+          t('routines.toasts.addDiveSuccess', {
+            dive: `${execution.diveCode}${execution.execution}`,
+            defaultValue: `Sprung ${execution.diveCode}${execution.execution} hinzugefügt`,
+          }),
+          'success'
+        );
+      }
     } catch (e: any) {
       showToast(getErrorMessage(e), 'error');
     } finally {
@@ -655,7 +742,7 @@ export default function RoutinesScreen() {
       }
 
       total++;
-      if (validateDiveForRoutine(targetRoutineForAdd, item).isValid) {
+      if (validateDiveForRoutine(targetRoutineForAdd, item, replaceTargetDive?.diveExecutionId).isValid) {
         valid++;
       }
     }
@@ -669,6 +756,7 @@ export default function RoutinesScreen() {
     onlyAthleteDivesFilter,
     athleteDiveExecutionIds,
     targetRoutineForAdd,
+    replaceTargetDive,
     getPositionName,
   ]);
 
@@ -713,7 +801,11 @@ export default function RoutinesScreen() {
 
       // Valide-Filter
       if (onlyValidFilter) {
-        const validation = validateDiveForRoutine(targetRoutineForAdd, item);
+        const validation = validateDiveForRoutine(
+          targetRoutineForAdd,
+          item,
+          replaceTargetDive?.diveExecutionId
+        );
         if (!validation.isValid) return false;
       }
 
@@ -728,6 +820,7 @@ export default function RoutinesScreen() {
     onlyAthleteDivesFilter,
     athleteDiveExecutionIds,
     targetRoutineForAdd,
+    replaceTargetDive,
     getPositionName,
   ]);
 
@@ -1026,19 +1119,35 @@ export default function RoutinesScreen() {
                         </View>
                       </View>
                       {canEdit && (
-                        <TouchableOpacity
-                          style={styles.removeDiveBtn}
-                          onPress={() =>
-                            promptRemoveDive(
-                              routine,
-                              de.id,
-                              `${de.diveCode}${de.execution}${diveTitle !== de.diveCode ? ` (${diveTitle})` : ''}`
-                            )
-                          }
-                          activeOpacity={0.7}
-                        >
-                          <Text style={styles.removeDiveBtnText}>🗑️</Text>
-                        </TouchableOpacity>
+                        <View style={styles.diveRowActions}>
+                          <TouchableOpacity
+                            style={styles.replaceDiveBtn}
+                            onPress={() =>
+                              openReplaceDiveModal(
+                                routine,
+                                de.id,
+                                `${de.diveCode}${de.execution}${diveTitle !== de.diveCode ? ` (${diveTitle})` : ''}`,
+                                idx
+                              )
+                            }
+                            activeOpacity={0.7}
+                          >
+                            <Text style={styles.replaceDiveBtnText}>🔄</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.removeDiveBtn}
+                            onPress={() =>
+                              promptRemoveDive(
+                                routine,
+                                de.id,
+                                `${de.diveCode}${de.execution}${diveTitle !== de.diveCode ? ` (${diveTitle})` : ''}`
+                              )
+                            }
+                            activeOpacity={0.7}
+                          >
+                            <Text style={styles.removeDiveBtnText}>🗑️</Text>
+                          </TouchableOpacity>
+                        </View>
                       )}
                     </View>
                   );
@@ -1313,17 +1422,30 @@ export default function RoutinesScreen() {
             {/* Header */}
             <View style={styles.addDiveModalHeader}>
               <View>
-                <Text style={styles.modalTitle}>{t('routines.addDiveModal.title', 'Sprung hinzufügen')}</Text>
+                <Text style={styles.modalTitle}>
+                  {replaceTargetDive
+                    ? t('routines.replaceDiveModal.title', 'Sprung ersetzen')
+                    : t('routines.addDiveModal.title', 'Sprung hinzufügen')}
+                </Text>
                 <Text style={styles.addDiveSub}>
-                  {t('routines.addDiveModal.subtitle', {
-                    name: getRoutineTitle(targetRoutineForAdd),
-                    defaultValue: `zu ${getRoutineTitle(targetRoutineForAdd)}`,
-                  })}
+                  {replaceTargetDive
+                    ? t('routines.replaceDiveModal.subtitle', {
+                        oldDive: replaceTargetDive.diveName,
+                        name: getRoutineTitle(targetRoutineForAdd),
+                        defaultValue: `Ersetzt „${replaceTargetDive.diveName}“ in ${getRoutineTitle(targetRoutineForAdd)}`,
+                      })
+                    : t('routines.addDiveModal.subtitle', {
+                        name: getRoutineTitle(targetRoutineForAdd),
+                        defaultValue: `zu ${getRoutineTitle(targetRoutineForAdd)}`,
+                      })}
                 </Text>
               </View>
               <TouchableOpacity
                 style={styles.closeModalBtn}
-                onPress={() => setAddDiveModalVisible(false)}
+                onPress={() => {
+                  setAddDiveModalVisible(false);
+                  setReplaceTargetDive(null);
+                }}
                 activeOpacity={0.7}
               >
                 <Text style={styles.closeModalBtnText}>✕</Text>
@@ -1493,7 +1615,11 @@ export default function RoutinesScreen() {
                   const diveTitle = (i18n.language === 'en' ? (item.nameEn || item.nameDe) : (item.nameDe || item.nameEn)) || item.diveCode;
                   const isAthleteDive = athleteDiveExecutionIds.has(item.id);
 
-                  const validation = validateDiveForRoutine(targetRoutineForAdd, item);
+                  const validation = validateDiveForRoutine(
+                    targetRoutineForAdd,
+                    item,
+                    replaceTargetDive?.diveExecutionId
+                  );
                   const isInvalid = !validation.isValid;
                   const reasonBadge = validation.reasonKey
                     ? t(`routines.validationBadges.${validation.reasonKey}`, validation.reasonKey)
@@ -1589,7 +1715,9 @@ export default function RoutinesScreen() {
                             {validation.reasonKey === 'ROUTINE_DUPLICATE_DIVE_NUMBER' ? '✓' : '✕'}
                           </Text>
                         ) : (
-                          <Text style={styles.catalogAddBtnText}>＋</Text>
+                          <Text style={styles.catalogAddBtnText}>
+                            {replaceTargetDive ? '⇄' : '＋'}
+                          </Text>
                         )}
                       </View>
                     </TouchableOpacity>
@@ -2151,6 +2279,19 @@ const styles = StyleSheet.create({
   diveMetaText: {
     fontSize: 10,
     color: Colors.textTertiary,
+  },
+  diveRowActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  replaceDiveBtn: {
+    padding: Spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  replaceDiveBtnText: {
+    fontSize: 14,
   },
   removeDiveBtn: {
     padding: Spacing.sm,

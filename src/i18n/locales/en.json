@@ -280,6 +280,7 @@
       "updateSuccess": "Routine updated",
       "deleteSuccess": "Routine \"{{name}}\" deleted",
       "addDiveSuccess": "Dive {{dive}} added",
+      "replaceDiveSuccess": "Dive {{oldDive}} replaced by {{dive}}",
       "removeDiveSuccess": "Dive removed",
       "reorderSuccess": "Order saved successfully"
     },
@@ -315,6 +316,10 @@
       "showAllBtn": "Show all dives",
       "alreadyInRoutine": "In Routine",
       "athleteDiveBadge": "Athlete"
+    },
+    "replaceDiveModal": {
+      "title": "Replace Dive",
+      "subtitle": "Replaces \"{{oldDive}}\" in {{name}}"
     },
     "validationBadges": {
       "ROUTINE_DUPLICATE_DIVE_NUMBER": "In Routine",
