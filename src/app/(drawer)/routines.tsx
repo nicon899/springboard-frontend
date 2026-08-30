@@ -303,6 +303,16 @@ export default function RoutinesScreen() {
   const [sortModalDives, setSortModalDives] = useState<DiveExecutionResponse[]>([]);
   const [isSavingOrder, setIsSavingOrder] = useState(false);
 
+  // Expanded state per routine ID (default: false / collapsed)
+  const [expandedRoutines, setExpandedRoutines] = useState<Record<number, boolean>>({});
+
+  const toggleRoutineExpand = (routineId: number) => {
+    setExpandedRoutines((prev) => ({
+      ...prev,
+      [routineId]: !prev[routineId],
+    }));
+  };
+
   // ── Daten laden ──
   const loadData = useCallback(async () => {
     if (!targetUserId || !activeClubId) return;
@@ -713,245 +723,265 @@ export default function RoutinesScreen() {
     const diveCount = routine.diveExecutions?.length ?? 0;
     const totalDD = routine.diveExecutions?.reduce((sum, de) => sum + (de.degreeOfDifficulty || 0), 0) ?? 0;
     const distinctGroups = new Set(routine.diveExecutions?.map((de) => de.groupNumber)).size;
+    const isExpanded = expandedRoutines[routine.id] === true;
 
     return (
       <View key={routine.id} style={styles.routineCard}>
         {/* Kopfzeile */}
-        <View style={styles.routineHeader}>
-          <View style={styles.routineIndexBadge}>
-            <Text style={styles.routineIndexText}>#{routine.index}</Text>
-          </View>
-          <View style={styles.routineHeaderInfo}>
-            <Text style={styles.routineTitle}>
-              {routine.displayName || spec?.name || t('routines.defaultRoutineTitle', { index: routine.index, defaultValue: `Routine #${routine.index}` })}
-            </Text>
-            {routine.displayName && spec?.name && (
-              <Text style={styles.routineSpecName}>{spec.name}</Text>
-            )}
-            <Text style={styles.routineSubtitle}>
-              {t('routines.diveCount', { count: diveCount })}
-              {spec
-                ? ` · ${
-                    spec.numberOfDives != null
-                      ? t('routines.maxDivesAllowed', { max: spec.numberOfDives, defaultValue: `max. ${spec.numberOfDives} erlaubt` })
-                      : t('routines.maxDivesUnlimited', 'max. ∞ erlaubt')
-                  }`
-                : ''}
-            </Text>
-          </View>
-          {canEdit && (
-            <View style={styles.routineActions}>
-              <TouchableOpacity
-                style={styles.iconBtn}
-                onPress={() => openEdit(routine)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.iconBtnText}>✏️</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.iconBtn, styles.iconBtnDanger]}
-                onPress={() => promptDeleteRoutine(routine)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.iconBtnText}>🗑️</Text>
-              </TouchableOpacity>
+        <View style={[styles.routineHeader, !isExpanded && styles.routineHeaderCollapsed]}>
+          <TouchableOpacity
+            style={styles.routineHeaderTouchable}
+            onPress={() => toggleRoutineExpand(routine.id)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.routineIndexBadge}>
+              <Text style={styles.routineIndexText}>#{routine.index}</Text>
             </View>
-          )}
-        </View>
-
-        {/* Spezifikations-Details */}
-        {spec && (
-          <View style={styles.specDetails}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={styles.specTagRow}>
-                {spec.numberOfDives != null && (
-                  <SpecTag label={t('routines.tags.dives', 'Sprünge')} value={String(spec.numberOfDives)} />
-                )}
-                {spec.numberOfGroups != null && (
-                  <SpecTag label={t('routines.tags.groups', 'Gruppen')} value={String(spec.numberOfGroups)} />
-                )}
-                {spec.maxDifficultyScore != null && (
-                  <SpecTag label={t('routines.tags.maxDifficulty', 'Max. SKG')} value={spec.maxDifficultyScore.toFixed(1)} />
-                )}
-                {spec.ageCategory && (
-                  <SpecTag label={t('routines.tags.ageCategory', 'Altersklasse')} value={spec.ageCategory.name} />
-                )}
-                {spec.gender && spec.gender !== 'ALL' && (
-                  <SpecTag label={t('routines.tags.gender', 'Geschlecht')} value={getGenderLabel(spec.gender)} />
-                )}
-                {spec.beginner && (
-                  <View style={[styles.specTag, styles.specTagHighlight]}>
-                    <Text style={styles.specTagHighlightText}>{t('routines.tags.beginner', 'Anfänger')}</Text>
-                  </View>
-                )}
-                {spec.juniorTableAllowed && (
-                  <View style={[styles.specTag, styles.specTagHighlight]}>
-                    <Text style={styles.specTagHighlightText}>{t('routines.tags.juniorTable', 'Juniortabelle')}</Text>
-                  </View>
-                )}
+            <View style={styles.routineHeaderInfo}>
+              <Text style={styles.routineTitle}>
+                {routine.displayName || spec?.name || t('routines.defaultRoutineTitle', { index: routine.index, defaultValue: `Routine #${routine.index}` })}
+              </Text>
+              {routine.displayName && spec?.name && (
+                <Text style={styles.routineSpecName}>{spec.name}</Text>
+              )}
+              <Text style={styles.routineSubtitle}>
+                {t('routines.diveCount', { count: diveCount })}
+                {spec
+                  ? ` · ${
+                      spec.numberOfDives != null
+                        ? t('routines.maxDivesAllowed', { max: spec.numberOfDives, defaultValue: `max. ${spec.numberOfDives} erlaubt` })
+                        : t('routines.maxDivesUnlimited', 'max. ∞ erlaubt')
+                    }`
+                  : ''}
+              </Text>
+            </View>
+          </TouchableOpacity>
+          <View style={styles.routineHeaderRight}>
+            {canEdit && (
+              <View style={styles.routineActions}>
+                <TouchableOpacity
+                  style={styles.iconBtn}
+                  onPress={() => openEdit(routine)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.iconBtnText}>✏️</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.iconBtn, styles.iconBtnDanger]}
+                  onPress={() => promptDeleteRoutine(routine)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.iconBtnText}>🗑️</Text>
+                </TouchableOpacity>
               </View>
-            </ScrollView>
-          </View>
-        )}
-
-        {/* Kennzahlen-Leiste */}
-        <View style={styles.statsBar}>
-          <View style={styles.statItem}>
-            <Text style={styles.statLabel}>{t('routines.stats.totalDifficulty', 'Gesamt-SKG')}</Text>
-            <Text style={styles.statValue}>
-              {totalDD.toFixed(1)}
-              {spec?.maxDifficultyScore != null ? (
-                <Text style={styles.statTarget}> / {spec.maxDifficultyScore.toFixed(1)}</Text>
-              ) : null}
-            </Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statLabel}>{t('routines.stats.groups', 'Gruppen')}</Text>
-            <Text style={styles.statValue}>
-              {distinctGroups}
-              {spec?.numberOfGroups != null ? (
-                <Text style={styles.statTarget}>
-                  {t('routines.stats.minGroups', { min: spec.numberOfGroups, defaultValue: ` / min. ${spec.numberOfGroups}` })}
-                </Text>
-              ) : null}
-            </Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statLabel}>{t('routines.stats.diveCount', 'Sprung-Anzahl')}</Text>
-            <Text style={styles.statValue}>
-              {diveCount}
-              {spec?.numberOfDives != null ? (
-                <Text style={styles.statTarget}> / {spec.numberOfDives}</Text>
-              ) : null}
-            </Text>
+            )}
+            <TouchableOpacity
+              style={styles.collapseToggleBtn}
+              onPress={() => toggleRoutineExpand(routine.id)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.collapseChevron}>{isExpanded ? '▲' : '▼'}</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
-        {/* Sprünge in der Routine */}
-        <View style={styles.divesSection}>
-          <View style={styles.divesSectionHeader}>
-            <Text style={styles.divesSectionTitle}>{t('routines.divesSectionTitle', 'Sprünge in dieser Routine')}</Text>
-            <View style={styles.divesHeaderActions}>
-              {canEdit && diveCount > 1 && (
-                <TouchableOpacity
-                  style={styles.sortInlineBtn}
-                  onPress={() => openSortModal(routine)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.sortInlineBtnText}>{t('routines.sortBtn', '⇅ Sortieren')}</Text>
-                </TouchableOpacity>
-              )}
-              {canEdit && (
-                <TouchableOpacity
-                  style={styles.addDiveInlineBtn}
-                  onPress={() => openAddDiveModal(routine)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.addDiveInlineText}>{t('routines.addDiveBtn', '+ Sprung hinzufügen')}</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-
-          {diveCount === 0 ? (
-            <View style={styles.emptyDivesContainer}>
-              <Text style={styles.emptyDivesText}>{t('routines.noDivesText', 'Noch keine Sprünge in dieser Routine.')}</Text>
-              {canEdit && (
-                <TouchableOpacity
-                  style={styles.addFirstDiveBtn}
-                  onPress={() => openAddDiveModal(routine)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.addFirstDiveBtnText}>{t('routines.addFirstDiveBtn', '+ Ersten Sprung hinzufügen')}</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          ) : (
-            routine.diveExecutions.map((de, idx) => {
-              const heightText = BACKEND_TO_HEIGHT[de.height] ?? de.height;
-              const posLabel = getPositionName(de.execution);
-              const groupName = getGroupName(de.groupNumber);
-              const diveTitle = (i18n.language === 'en' ? (de.nameEn || de.nameDe) : (de.nameDe || de.nameEn)) || de.diveCode;
-              const isFirst = idx === 0;
-              const isLast = idx === routine.diveExecutions.length - 1;
-              const isReorderingThis = isReorderingRoutineId === routine.id;
-
-              return (
-                <View key={`${de.id}-${idx}`} style={styles.diveRow}>
-                  {canEdit && routine.diveExecutions.length > 1 && (
-                    <View style={styles.reorderBtnCol}>
-                      <TouchableOpacity
-                        style={[styles.reorderArrowBtn, isFirst && styles.reorderArrowBtnDisabled]}
-                        onPress={() => handleMoveDive(routine, idx, -1)}
-                        disabled={isFirst || isReorderingThis}
-                        activeOpacity={0.6}
-                      >
-                        <Text style={[styles.reorderArrowText, isFirst && styles.reorderArrowTextDisabled]}>▲</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[
-                          styles.reorderArrowBtn,
-                          isLast && styles.reorderArrowBtnDisabled,
-                        ]}
-                        onPress={() => handleMoveDive(routine, idx, 1)}
-                        disabled={isLast || isReorderingThis}
-                        activeOpacity={0.6}
-                      >
-                        <Text
-                          style={[
-                            styles.reorderArrowText,
-                            isLast && styles.reorderArrowTextDisabled,
-                          ]}
-                        >
-                          ▼
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                  <View style={styles.diveIndexCircle}>
-                    <Text style={styles.diveIndexText}>{idx + 1}</Text>
+        {isExpanded && (
+          <>
+            {/* Spezifikations-Details */}
+            {spec && (
+              <View style={styles.specDetails}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={styles.specTagRow}>
+                    {spec.numberOfDives != null && (
+                      <SpecTag label={t('routines.tags.dives', 'Sprünge')} value={String(spec.numberOfDives)} />
+                    )}
+                    {spec.numberOfGroups != null && (
+                      <SpecTag label={t('routines.tags.groups', 'Gruppen')} value={String(spec.numberOfGroups)} />
+                    )}
+                    {spec.maxDifficultyScore != null && (
+                      <SpecTag label={t('routines.tags.maxDifficulty', 'Max. SKG')} value={spec.maxDifficultyScore.toFixed(1)} />
+                    )}
+                    {spec.ageCategory && (
+                      <SpecTag label={t('routines.tags.ageCategory', 'Altersklasse')} value={spec.ageCategory.name} />
+                    )}
+                    {spec.gender && spec.gender !== 'ALL' && (
+                      <SpecTag label={t('routines.tags.gender', 'Geschlecht')} value={getGenderLabel(spec.gender)} />
+                    )}
+                    {spec.beginner && (
+                      <View style={[styles.specTag, styles.specTagHighlight]}>
+                        <Text style={styles.specTagHighlightText}>{t('routines.tags.beginner', 'Anfänger')}</Text>
+                      </View>
+                    )}
+                    {spec.juniorTableAllowed && (
+                      <View style={[styles.specTag, styles.specTagHighlight]}>
+                        <Text style={styles.specTagHighlightText}>{t('routines.tags.juniorTable', 'Juniortabelle')}</Text>
+                      </View>
+                    )}
                   </View>
-                  <View style={styles.diveCodeChip}>
-                    <Text style={styles.diveCodeText}>{de.diveCode}{de.execution}</Text>
-                  </View>
-                  <View style={styles.diveInfo}>
-                    <Text style={styles.diveName} numberOfLines={1}>
-                      {diveTitle}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* Kennzahlen-Leiste */}
+            <View style={styles.statsBar}>
+              <View style={styles.statItem}>
+                <Text style={styles.statLabel}>{t('routines.stats.totalDifficulty', 'Gesamt-SKG')}</Text>
+                <Text style={styles.statValue}>
+                  {totalDD.toFixed(1)}
+                  {spec?.maxDifficultyScore != null ? (
+                    <Text style={styles.statTarget}> / {spec.maxDifficultyScore.toFixed(1)}</Text>
+                  ) : null}
+                </Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statLabel}>{t('routines.stats.groups', 'Gruppen')}</Text>
+                <Text style={styles.statValue}>
+                  {distinctGroups}
+                  {spec?.numberOfGroups != null ? (
+                    <Text style={styles.statTarget}>
+                      {t('routines.stats.minGroups', { min: spec.numberOfGroups, defaultValue: ` / min. ${spec.numberOfGroups}` })}
                     </Text>
-                    <View style={styles.diveMetaRow}>
-                      <Text style={styles.diveMetaBadge}>{heightText}</Text>
-                      <Text style={styles.diveMetaBadge}>{posLabel}</Text>
-                      <Text style={styles.diveMetaBadge}>
-                        {t('routines.difficultyBadge', {
-                          dd: de.degreeOfDifficulty.toFixed(1),
-                          defaultValue: `SKG ${de.degreeOfDifficulty.toFixed(1)}`,
-                        })}
-                      </Text>
-                      <Text style={styles.diveMetaText}>{groupName}</Text>
-                    </View>
-                  </View>
+                  ) : null}
+                </Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statLabel}>{t('routines.stats.diveCount', 'Sprung-Anzahl')}</Text>
+                <Text style={styles.statValue}>
+                  {diveCount}
+                  {spec?.numberOfDives != null ? (
+                    <Text style={styles.statTarget}> / {spec.numberOfDives}</Text>
+                  ) : null}
+                </Text>
+              </View>
+            </View>
+
+            {/* Sprünge in der Routine */}
+            <View style={styles.divesSection}>
+              <View style={styles.divesSectionHeader}>
+                <Text style={styles.divesSectionTitle}>{t('routines.divesSectionTitle', 'Sprünge in dieser Routine')}</Text>
+                <View style={styles.divesHeaderActions}>
+                  {canEdit && diveCount > 1 && (
+                    <TouchableOpacity
+                      style={styles.sortInlineBtn}
+                      onPress={() => openSortModal(routine)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.sortInlineBtnText}>{t('routines.sortBtn', '⇅ Sortieren')}</Text>
+                    </TouchableOpacity>
+                  )}
                   {canEdit && (
                     <TouchableOpacity
-                      style={styles.removeDiveBtn}
-                      onPress={() =>
-                        promptRemoveDive(
-                          routine,
-                          de.id,
-                          `${de.diveCode}${de.execution}${diveTitle !== de.diveCode ? ` (${diveTitle})` : ''}`
-                        )
-                      }
-                      activeOpacity={0.7}
+                      style={styles.addDiveInlineBtn}
+                      onPress={() => openAddDiveModal(routine)}
+                      activeOpacity={0.8}
                     >
-                      <Text style={styles.removeDiveBtnText}>🗑️</Text>
+                      <Text style={styles.addDiveInlineText}>{t('routines.addDiveBtn', '+ Sprung hinzufügen')}</Text>
                     </TouchableOpacity>
                   )}
                 </View>
-              );
-            })
-          )}
-        </View>
+              </View>
+
+              {diveCount === 0 ? (
+                <View style={styles.emptyDivesContainer}>
+                  <Text style={styles.emptyDivesText}>{t('routines.noDivesText', 'Noch keine Sprünge in dieser Routine.')}</Text>
+                  {canEdit && (
+                    <TouchableOpacity
+                      style={styles.addFirstDiveBtn}
+                      onPress={() => openAddDiveModal(routine)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.addFirstDiveBtnText}>{t('routines.addFirstDiveBtn', '+ Ersten Sprung hinzufügen')}</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ) : (
+                routine.diveExecutions.map((de, idx) => {
+                  const heightText = BACKEND_TO_HEIGHT[de.height] ?? de.height;
+                  const posLabel = getPositionName(de.execution);
+                  const groupName = getGroupName(de.groupNumber);
+                  const diveTitle = (i18n.language === 'en' ? (de.nameEn || de.nameDe) : (de.nameDe || de.nameEn)) || de.diveCode;
+                  const isFirst = idx === 0;
+                  const isLast = idx === routine.diveExecutions.length - 1;
+                  const isReorderingThis = isReorderingRoutineId === routine.id;
+
+                  return (
+                    <View key={`${de.id}-${idx}`} style={styles.diveRow}>
+                      {canEdit && routine.diveExecutions.length > 1 && (
+                        <View style={styles.reorderBtnCol}>
+                          <TouchableOpacity
+                            style={[styles.reorderArrowBtn, isFirst && styles.reorderArrowBtnDisabled]}
+                            onPress={() => handleMoveDive(routine, idx, -1)}
+                            disabled={isFirst || isReorderingThis}
+                            activeOpacity={0.6}
+                          >
+                            <Text style={[styles.reorderArrowText, isFirst && styles.reorderArrowTextDisabled]}>▲</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[
+                              styles.reorderArrowBtn,
+                              isLast && styles.reorderArrowBtnDisabled,
+                            ]}
+                            onPress={() => handleMoveDive(routine, idx, 1)}
+                            disabled={isLast || isReorderingThis}
+                            activeOpacity={0.6}
+                          >
+                            <Text
+                              style={[
+                                styles.reorderArrowText,
+                                isLast && styles.reorderArrowTextDisabled,
+                              ]}
+                            >
+                              ▼
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                      <View style={styles.diveIndexCircle}>
+                        <Text style={styles.diveIndexText}>{idx + 1}</Text>
+                      </View>
+                      <View style={styles.diveCodeChip}>
+                        <Text style={styles.diveCodeText}>{de.diveCode}{de.execution}</Text>
+                      </View>
+                      <View style={styles.diveInfo}>
+                        <Text style={styles.diveName} numberOfLines={1}>
+                          {diveTitle}
+                        </Text>
+                        <View style={styles.diveMetaRow}>
+                          <Text style={styles.diveMetaBadge}>{heightText}</Text>
+                          <Text style={styles.diveMetaBadge}>{posLabel}</Text>
+                          <Text style={styles.diveMetaBadge}>
+                            {t('routines.difficultyBadge', {
+                              dd: de.degreeOfDifficulty.toFixed(1),
+                              defaultValue: `SKG ${de.degreeOfDifficulty.toFixed(1)}`,
+                            })}
+                          </Text>
+                          <Text style={styles.diveMetaText}>{groupName}</Text>
+                        </View>
+                      </View>
+                      {canEdit && (
+                        <TouchableOpacity
+                          style={styles.removeDiveBtn}
+                          onPress={() =>
+                            promptRemoveDive(
+                              routine,
+                              de.id,
+                              `${de.diveCode}${de.execution}${diveTitle !== de.diveCode ? ` (${diveTitle})` : ''}`
+                            )
+                          }
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.removeDiveBtnText}>🗑️</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  );
+                })
+              )}
+            </View>
+          </>
+        )}
       </View>
     );
   };
@@ -1764,7 +1794,35 @@ const styles = StyleSheet.create({
   routineHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: Spacing.sm,
+  },
+  routineHeaderCollapsed: {
+    marginBottom: 0,
+  },
+  routineHeaderTouchable: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: Spacing.xs,
+  },
+  routineHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  collapseToggleBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: Colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  collapseChevron: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+    fontWeight: FontWeight.bold,
   },
   routineIndexBadge: {
     width: 40,
