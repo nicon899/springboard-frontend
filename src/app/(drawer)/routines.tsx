@@ -31,6 +31,7 @@ import {
 } from '../../services/api';
 import { DIVE_GROUP_NAMES } from '../constants/diveData';
 import Toast, { ToastMessage, ToastType } from '../../components/ui/Toast';
+import ConfirmModal from '../../components/modals/ConfirmModal';
 
 // ────────────────────────────────────────────────────────────
 // Hilfsfunktionen & Konstanten
@@ -159,6 +160,16 @@ export default function RoutinesScreen() {
   const [selectedGroupFilter, setSelectedGroupFilter] = useState<number | null>(null);
   const [isAddingDiveId, setIsAddingDiveId] = useState<number | null>(null);
 
+  // Delete confirmation states
+  const [routineToDelete, setRoutineToDelete] = useState<RoutineResponse | null>(null);
+  const [isDeletingRoutine, setIsDeletingRoutine] = useState(false);
+  const [diveToRemove, setDiveToRemove] = useState<{
+    routine: RoutineResponse;
+    diveExecutionId: number;
+    diveName: string;
+  } | null>(null);
+  const [isRemovingDive, setIsRemovingDive] = useState(false);
+
   // ── Daten laden ──
   const loadData = useCallback(async () => {
     if (!targetUserId || !activeClubId) return;
@@ -246,27 +257,23 @@ export default function RoutinesScreen() {
   };
 
   // ── Routine löschen ──
-  const handleDelete = (routine: RoutineResponse) => {
-    Alert.alert(
-      'Routine löschen',
-      `Routine #${routine.index} wirklich löschen?`,
-      [
-        { text: 'Abbrechen', style: 'cancel' },
-        {
-          text: 'Löschen',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await api.deleteRoutine(routine.id);
-              showToast(`Routine #${routine.index} gelöscht`, 'info');
-              await loadData();
-            } catch (e: any) {
-              showToast(getErrorMessage(e), 'error');
-            }
-          },
-        },
-      ]
-    );
+  const promptDeleteRoutine = (routine: RoutineResponse) => {
+    setRoutineToDelete(routine);
+  };
+
+  const confirmDeleteRoutine = async () => {
+    if (!routineToDelete) return;
+    setIsDeletingRoutine(true);
+    try {
+      await api.deleteRoutine(routineToDelete.id);
+      showToast(`Routine #${routineToDelete.index} gelöscht`, 'info');
+      setRoutineToDelete(null);
+      await loadData();
+    } catch (e: any) {
+      showToast(getErrorMessage(e), 'error');
+    } finally {
+      setIsDeletingRoutine(false);
+    }
   };
 
   // ── Sprung zu Routine hinzufügen ──
@@ -300,29 +307,28 @@ export default function RoutinesScreen() {
   };
 
   // ── Sprung aus Routine entfernen ──
-  const handleRemoveDive = (routine: RoutineResponse, diveExecutionId: number, diveName: string) => {
-    Alert.alert(
-      'Sprung entfernen',
-      `Möchtest du „${diveName}“ aus Routine #${routine.index} entfernen?`,
-      [
-        { text: 'Abbrechen', style: 'cancel' },
-        {
-          text: 'Entfernen',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const updatedRoutine = await api.removeDiveFromRoutine(routine.id, diveExecutionId);
-              setRoutines((prev) =>
-                prev.map((r) => (r.id === updatedRoutine.id ? updatedRoutine : r))
-              );
-              showToast('Sprung entfernt', 'info');
-            } catch (e: any) {
-              showToast(getErrorMessage(e), 'error');
-            }
-          },
-        },
-      ]
-    );
+  const promptRemoveDive = (routine: RoutineResponse, diveExecutionId: number, diveName: string) => {
+    setDiveToRemove({ routine, diveExecutionId, diveName });
+  };
+
+  const confirmRemoveDive = async () => {
+    if (!diveToRemove) return;
+    setIsRemovingDive(true);
+    try {
+      const updatedRoutine = await api.removeDiveFromRoutine(
+        diveToRemove.routine.id,
+        diveToRemove.diveExecutionId
+      );
+      setRoutines((prev) =>
+        prev.map((r) => (r.id === updatedRoutine.id ? updatedRoutine : r))
+      );
+      showToast('Sprung entfernt', 'info');
+      setDiveToRemove(null);
+    } catch (e: any) {
+      showToast(getErrorMessage(e), 'error');
+    } finally {
+      setIsRemovingDive(false);
+    }
   };
 
   // ── Gefilterte Sprungvarianten für Modal ──
@@ -400,7 +406,7 @@ export default function RoutinesScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.iconBtn, styles.iconBtnDanger]}
-                onPress={() => handleDelete(routine)}
+                onPress={() => promptDeleteRoutine(routine)}
                 activeOpacity={0.7}
               >
                 <Text style={styles.iconBtnText}>🗑️</Text>
@@ -533,7 +539,13 @@ export default function RoutinesScreen() {
                   {canEdit && (
                     <TouchableOpacity
                       style={styles.removeDiveBtn}
-                      onPress={() => handleRemoveDive(routine, de.id, `${de.diveCode}${de.execution} (${de.nameDe || ''})`)}
+                      onPress={() =>
+                        promptRemoveDive(
+                          routine,
+                          de.id,
+                          `${de.diveCode}${de.execution}${de.nameDe ? ` (${de.nameDe})` : ''}`
+                        )
+                      }
                       activeOpacity={0.7}
                     >
                       <Text style={styles.removeDiveBtnText}>🗑️</Text>
@@ -931,6 +943,40 @@ export default function RoutinesScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* ── Confirm Delete Routine Modal ── */}
+      <ConfirmModal
+        visible={!!routineToDelete}
+        title="Routine löschen"
+        message={
+          routineToDelete
+            ? `Möchtest du Routine #${routineToDelete.index}${routineToDelete.displayName ? ` (${routineToDelete.displayName})` : ''} wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`
+            : ''
+        }
+        confirmText="Löschen"
+        cancelText="Abbrechen"
+        variant="danger"
+        isLoading={isDeletingRoutine}
+        onConfirm={confirmDeleteRoutine}
+        onCancel={() => !isDeletingRoutine && setRoutineToDelete(null)}
+      />
+
+      {/* ── Confirm Remove Dive Modal ── */}
+      <ConfirmModal
+        visible={!!diveToRemove}
+        title="Sprung entfernen"
+        message={
+          diveToRemove
+            ? `Möchtest du „${diveToRemove.diveName}“ wirklich aus Routine #${diveToRemove.routine.index} entfernen?`
+            : ''
+        }
+        confirmText="Entfernen"
+        cancelText="Abbrechen"
+        variant="danger"
+        isLoading={isRemovingDive}
+        onConfirm={confirmRemoveDive}
+        onCancel={() => !isRemovingDive && setDiveToRemove(null)}
+      />
     </View>
   );
 }

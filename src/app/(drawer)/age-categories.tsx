@@ -23,6 +23,7 @@ import {
   AgeCategoryResponse,
   CreateAgeCategoryRequest,
 } from '../../services/api';
+import ConfirmModal from '../../components/modals/ConfirmModal';
 
 // ────────────────────────────────────────────────────────────
 // Form State
@@ -67,6 +68,10 @@ export default function AgeCategoriesScreen() {
   const [editingCat, setEditingCat] = useState<AgeCategoryResponse | null>(null);
   const [form, setForm] = useState<AgeCatForm>(EMPTY_FORM);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Delete modal state
+  const [catToDelete, setCatToDelete] = useState<AgeCategoryResponse | null>(null);
+  const [isDeletingCat, setIsDeletingCat] = useState(false);
 
   // ── Daten laden ──
   const loadCategories = useCallback(async () => {
@@ -151,26 +156,22 @@ export default function AgeCategoriesScreen() {
   };
 
   // ── Löschen ──
-  const handleDelete = (cat: AgeCategoryResponse) => {
-    Alert.alert(
-      'Altersklasse löschen',
-      `„${cat.name}" wirklich löschen?`,
-      [
-        { text: 'Abbrechen', style: 'cancel' },
-        {
-          text: 'Löschen',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await api.deleteAgeCategory(cat.id);
-              await loadCategories();
-            } catch (e: any) {
-              Alert.alert('Fehler', e?.message || 'Löschen fehlgeschlagen');
-            }
-          },
-        },
-      ]
-    );
+  const promptDelete = (cat: AgeCategoryResponse) => {
+    setCatToDelete(cat);
+  };
+
+  const confirmDelete = async () => {
+    if (!catToDelete) return;
+    setIsDeletingCat(true);
+    try {
+      await api.deleteAgeCategory(catToDelete.id);
+      setCatToDelete(null);
+      await loadCategories();
+    } catch (e: any) {
+      Alert.alert('Fehler', e?.message || 'Löschen fehlgeschlagen');
+    } finally {
+      setIsDeletingCat(false);
+    }
   };
 
   // ── Karte ──
@@ -197,7 +198,7 @@ export default function AgeCategoriesScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.iconBtn, styles.iconBtnDanger]}
-                onPress={() => handleDelete(cat)}
+                onPress={() => promptDelete(cat)}
                 activeOpacity={0.7}
               >
                 <Text style={styles.iconBtnText}>🗑️</Text>
@@ -366,6 +367,23 @@ export default function AgeCategoriesScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* ── Confirm Delete Modal ── */}
+      <ConfirmModal
+        visible={!!catToDelete}
+        title="Altersklasse löschen"
+        message={
+          catToDelete
+            ? `Möchtest du die Altersklasse „${catToDelete.name}“ wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`
+            : ''
+        }
+        confirmText="Löschen"
+        cancelText="Abbrechen"
+        variant="danger"
+        isLoading={isDeletingCat}
+        onConfirm={confirmDelete}
+        onCancel={() => !isDeletingCat && setCatToDelete(null)}
+      />
     </View>
   );
 }

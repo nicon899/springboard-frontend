@@ -26,6 +26,7 @@ import {
   CreateRoutineSpecificationRequest,
   AgeCategoryResponse,
 } from '../../services/api';
+import ConfirmModal from '../../components/modals/ConfirmModal';
 
 // ────────────────────────────────────────────────────────────
 // Konstanten
@@ -99,12 +100,15 @@ export default function RoutineSpecificationsScreen() {
   const [ageCategories, setAgeCategories] = useState<AgeCategoryResponse[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Modal state
   const [modalVisible, setModalVisible] = useState(false);
   const [editingSpec, setEditingSpec] = useState<RoutineSpecificationResponse | null>(null);
   const [form, setForm] = useState<SpecFormData>(EMPTY_FORM);
   const [isSaving, setIsSaving] = useState(false);
   const [ageCatDropdownOpen, setAgeCatDropdownOpen] = useState(false);
+
+  // Delete modal state
+  const [specToDelete, setSpecToDelete] = useState<RoutineSpecificationResponse | null>(null);
+  const [isDeletingSpec, setIsDeletingSpec] = useState(false);
 
   // ── Daten laden ──
   const loadData = useCallback(async () => {
@@ -185,26 +189,22 @@ export default function RoutineSpecificationsScreen() {
   };
 
   // ── Löschen ──
-  const handleDelete = (spec: RoutineSpecificationResponse) => {
-    Alert.alert(
-      'Serienspezifikation löschen',
-      `„${spec.name || `Spezifikation #${spec.id}`}" wirklich löschen?`,
-      [
-        { text: 'Abbrechen', style: 'cancel' },
-        {
-          text: 'Löschen',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await api.deleteRoutineSpecification(spec.id);
-              await loadData();
-            } catch (e: any) {
-              Alert.alert('Fehler', e?.message || 'Löschen fehlgeschlagen');
-            }
-          },
-        },
-      ]
-    );
+  const promptDelete = (spec: RoutineSpecificationResponse) => {
+    setSpecToDelete(spec);
+  };
+
+  const confirmDelete = async () => {
+    if (!specToDelete) return;
+    setIsDeletingSpec(true);
+    try {
+      await api.deleteRoutineSpecification(specToDelete.id);
+      setSpecToDelete(null);
+      await loadData();
+    } catch (e: any) {
+      Alert.alert('Fehler', e?.message || 'Löschen fehlgeschlagen');
+    } finally {
+      setIsDeletingSpec(false);
+    }
   };
 
   // ── Spec-Karte ──
@@ -230,7 +230,7 @@ export default function RoutineSpecificationsScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.iconBtn, styles.iconBtnDanger]}
-              onPress={() => handleDelete(spec)}
+              onPress={() => promptDelete(spec)}
               activeOpacity={0.7}
             >
               <Text style={styles.iconBtnText}>🗑️</Text>
@@ -488,6 +488,23 @@ export default function RoutineSpecificationsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* ── Confirm Delete Modal ── */}
+      <ConfirmModal
+        visible={!!specToDelete}
+        title="Serienspezifikation löschen"
+        message={
+          specToDelete
+            ? `Möchtest du die Serienspezifikation „${specToDelete.name || `Spezifikation #${specToDelete.id}`}“ wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`
+            : ''
+        }
+        confirmText="Löschen"
+        cancelText="Abbrechen"
+        variant="danger"
+        isLoading={isDeletingSpec}
+        onConfirm={confirmDelete}
+        onCancel={() => !isDeletingSpec && setSpecToDelete(null)}
+      />
     </View>
   );
 }
