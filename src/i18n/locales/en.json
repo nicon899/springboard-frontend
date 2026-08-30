@@ -225,18 +225,14 @@
   },
   "routines": {
     "title": "Routines",
-    "routineCount": "{{count}} routine",
-    "routineCount_other": "{{count}} routines",
+    "defaultRoutineTitle": "Routine",
+    "routineCount_one": "{{count}} Routine",
+    "routineCount_other": "{{count}} Routines",
     "newRoutineBtn": "+ New Routine",
-    "loading": "Loading routines...",
-    "emptyTitle": "No routines",
+    "loading": "Loading routines…",
+    "noRoutinesTitle": "No Routines",
     "emptyTextCanEdit": "Create a new routine.",
     "emptyText": "No routines available yet.",
-    "defaultRoutineTitle": "Routine #{{index}}",
-    "diveCount": "{{count}} dive",
-    "diveCount_other": "{{count}} dives",
-    "maxDivesAllowed": "max. {{max}} allowed",
-    "maxDivesUnlimited": "max. ∞ allowed",
     "tags": {
       "dives": "Dives",
       "groups": "Groups",
@@ -252,55 +248,60 @@
       "minGroups": " / min. {{min}}",
       "diveCount": "Dive Count"
     },
-    "difficultyBadge": "DD {{dd}}",
     "divesSectionTitle": "Dives in this routine",
+    "incompleteWarning": "Incomplete ({{current}}/{{required}})",
+    "incompleteBannerText_one": "Routine incomplete: {{count}} dive remaining ({{current}}/{{required}} added).",
+    "incompleteBannerText_other": "Routine incomplete: {{count}} dives remaining ({{current}}/{{required}} added).",
+    "ageCategoryMismatchBadge": "Age mismatch ({{category}})",
+    "ageCategoryMismatchBanner": "Age category mismatch: \"{{category}}\" ({{range}}) does not match athlete's age ({{athleteAge}} yrs).",
     "sortBtn": "⇅ Sort",
     "addDiveBtn": "+ Add Dive",
     "noDivesText": "No dives in this routine yet.",
-    "addFirstDiveBtn": "+ Add first dive",
+    "addFirstDiveBtn": "+ Add First Dive",
+    "difficultyBadge": "DD {{dd}}",
+    "genderAll": "All",
+    "genderMale": "Male",
+    "genderFemale": "Female",
+    "genderDiverse": "Diverse",
     "positions": {
       "A": "Straight",
       "B": "Pike",
       "C": "Tuck",
       "D": "Free"
     },
-    "genderAll": "All",
-    "genderMale": "Male",
-    "genderFemale": "Female",
-    "genderDiverse": "Other",
     "dropdown": {
-      "selectSpec": "Select specification...",
+      "selectSpec": "Select specification…",
       "noSpec": "No specification",
-      "maxDifficultyShort": "DD max. {{max}}",
-      "createSpecLink": "＋ Create new specification"
+      "createSpecLink": "＋ Create new specification",
+      "maxDifficultyShort": "DD max. {{max}}"
     },
     "toasts": {
-      "createSuccess": "Routine successfully created",
+      "createSuccess": "Routine created successfully",
       "updateSuccess": "Routine updated",
-      "deleteSuccess": "Routine #{{index}} deleted",
+      "deleteSuccess": "Routine \"{{name}}\" deleted",
       "addDiveSuccess": "Dive {{dive}} added",
       "removeDiveSuccess": "Dive removed",
-      "reorderSuccess": "Order successfully saved"
+      "reorderSuccess": "Order saved successfully"
     },
     "createModal": {
       "title": "Create New Routine",
       "displayNameLabel": "Display Name (optional)",
       "displayNamePlaceholder": "e.g. Competition Compulsory 2025",
       "specLabel": "Routine Specification (optional)",
-      "create": "Create",
-      "creating": "Creating..."
+      "creating": "Creating…",
+      "create": "Create"
     },
     "editModal": {
-      "title": "Edit Routine #{{index}}",
+      "title": "Edit Routine",
       "displayNameLabel": "Display Name",
       "displayNamePlaceholder": "e.g. Competition Compulsory 2025",
       "specLabel": "Routine Specification",
-      "save": "Save",
-      "saving": "Saving..."
+      "saving": "Saving…",
+      "save": "Save"
     },
     "addDiveModal": {
       "title": "Add Dive",
-      "subtitle": "to Routine #{{index}} {{name}}",
+      "subtitle": "to {{name}}",
       "searchPlaceholder": "Search dive code or name (e.g. 103B, Reverse...)",
       "allHeights": "All Heights",
       "allGroups": "All Groups",
@@ -324,23 +325,22 @@
     },
     "sortModal": {
       "title": "Sort Dives",
-      "subtitle": "Routine #{{index}} {{name}}",
+      "subtitle": "{{name}}",
       "quickSort": "Quick Sort",
       "presetGroup": "🏷️ By Group",
       "presetDdAsc": "📈 DD Ascending",
       "presetDdDesc": "📉 DD Descending",
       "presetCode": "🔢 By Number",
-      "customOrder": "Adjust order ({{count}} dives)",
-      "customOrder_one": "Adjust order ({{count}} dive)",
+      "customOrder": "Custom Order ({{count}} Dives)",
       "saveOrder": "Save Order"
     },
     "deleteModal": {
       "title": "Delete Routine",
-      "message": "Do you really want to delete Routine #{{index}}{{name}}? This action cannot be undone."
+      "message": "Do you really want to delete routine \"{{name}}\"? This action cannot be undone."
     },
     "removeDiveModal": {
       "title": "Remove Dive",
-      "message": "Do you really want to remove \"{{diveName}}\" from Routine #{{index}}?",
+      "message": "Do you really want to remove \"{{diveName}}\" from \"{{routineName}}\"?",
       "confirmBtn": "Remove"
     },
     "errors": {

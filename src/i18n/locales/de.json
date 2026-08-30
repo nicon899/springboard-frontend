@@ -225,14 +225,14 @@
   },
   "routines": {
     "title": "Routinen",
-    "routineCount": "{{count}} Routine",
+    "routineCount_one": "{{count}} Routine",
     "routineCount_other": "{{count}} Routinen",
     "newRoutineBtn": "+ Neue Routine",
     "loading": "Lade Routinen…",
-    "emptyTitle": "Keine Routinen",
+    "noRoutinesTitle": "Keine Routinen",
     "emptyTextCanEdit": "Lege eine neue Routine an.",
     "emptyText": "Es sind noch keine Routinen vorhanden.",
-    "defaultRoutineTitle": "Routine #{{index}}",
+    "defaultRoutineTitle": "Routine",
     "diveCount": "{{count}} Sprung",
     "diveCount_other": "{{count}} Sprünge",
     "maxDivesAllowed": "max. {{max}} erlaubt",
@@ -253,6 +253,11 @@
       "diveCount": "Sprung-Anzahl"
     },
     "difficultyBadge": "SKG {{dd}}",
+    "incompleteWarning": "Unvollständig ({{current}}/{{required}})",
+    "incompleteBannerText_one": "Serie unvollständig: Noch {{count}} Sprung erforderlich ({{current}}/{{required}} vorhanden).",
+    "incompleteBannerText_other": "Serie unvollständig: Noch {{count}} Sprünge erforderlich ({{current}}/{{required}} vorhanden).",
+    "ageCategoryMismatchBadge": "AK unpassend ({{category}})",
+    "ageCategoryMismatchBanner": "Altersklasse unpassend: „{{category}}“ ({{range}}) passt nicht zum Alter des Sportlers ({{athleteAge}} Jahre).",
     "divesSectionTitle": "Sprünge in dieser Routine",
     "sortBtn": "⇅ Sortieren",
     "addDiveBtn": "+ Sprung hinzufügen",
@@ -277,7 +282,7 @@
     "toasts": {
       "createSuccess": "Routine erfolgreich angelegt",
       "updateSuccess": "Routine aktualisiert",
-      "deleteSuccess": "Routine #{{index}} gelöscht",
+      "deleteSuccess": "Routine „{{name}}“ gelöscht",
       "addDiveSuccess": "Sprung {{dive}} hinzugefügt",
       "removeDiveSuccess": "Sprung entfernt",
       "reorderSuccess": "Reihenfolge erfolgreich gespeichert"
@@ -291,7 +296,7 @@
       "creating": "Anlegen…"
     },
     "editModal": {
-      "title": "Routine #{{index}} bearbeiten",
+      "title": "Routine bearbeiten",
       "displayNameLabel": "Anzeigename",
       "displayNamePlaceholder": "z. B. Wettkampf Pflicht 2025",
       "specLabel": "Serienspezifikation",
@@ -300,7 +305,7 @@
     },
     "addDiveModal": {
       "title": "Sprung hinzufügen",
-      "subtitle": "zu Routine #{{index}} {{name}}",
+      "subtitle": "zu {{name}}",
       "searchPlaceholder": "Sprungcode oder Name suchen (z. B. 103B, Auerbach…)",
       "allHeights": "Alle Höhen",
       "allGroups": "Alle Gruppen",
@@ -324,7 +329,7 @@
     },
     "sortModal": {
       "title": "Sprünge sortieren",
-      "subtitle": "Routine #{{index}} {{name}}",
+      "subtitle": "{{name}}",
       "quickSort": "Schnell-Sortierung",
       "presetGroup": "🏷️ Nach Gruppe",
       "presetDdAsc": "📈 SKG aufsteigend",
@@ -336,11 +341,11 @@
     },
     "deleteModal": {
       "title": "Routine löschen",
-      "message": "Möchtest du Routine #{{index}}{{name}} wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden."
+      "message": "Möchtest du die Routine „{{name}}“ wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden."
     },
     "removeDiveModal": {
       "title": "Sprung entfernen",
-      "message": "Möchtest du „{{diveName}}“ wirklich aus Routine #{{index}} entfernen?",
+      "message": "Möchtest du „{{diveName}}“ wirklich aus „{{routineName}}“ entfernen?",
       "confirmBtn": "Entfernen"
     },
     "errors": {

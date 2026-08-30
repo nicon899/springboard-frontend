@@ -186,11 +186,13 @@ function parseErrorMessage(e: any, t?: (key: string, options?: any) => string): 
   return fallbackMessage || String(e);
 }
 
-function SpecTag({ label, value }: { label: string; value: string }) {
+function SpecTag({ label, value, warning }: { label: string; value: string; warning?: boolean }) {
   return (
-    <View style={styles.specTag}>
-      <Text style={styles.specTagLabel}>{label}</Text>
-      <Text style={styles.specTagValue}>{value}</Text>
+    <View style={[styles.specTag, warning && styles.specTagWarning]}>
+      <Text style={[styles.specTagLabel, warning && styles.specTagLabelWarning]}>{label}</Text>
+      <Text style={[styles.specTagValue, warning && styles.specTagValueWarning]}>
+        {warning ? `⚠️ ${value}` : value}
+      </Text>
     </View>
   );
 }
@@ -247,8 +249,17 @@ export default function RoutinesScreen() {
     return i18n.language === 'en' ? grp.en : grp.de;
   }, [i18n.language]);
 
+  const getRoutineTitle = useCallback(
+    (r?: RoutineResponse | null) => {
+      if (!r) return '';
+      return r.displayName || r.template?.name || t('routines.defaultRoutineTitle', 'Routine');
+    },
+    [t]
+  );
+
   const [routines, setRoutines] = useState<RoutineResponse[]>([]);
   const [specs, setSpecs] = useState<RoutineSpecificationResponse[]>([]);
+  const [athleteProfile, setAthleteProfile] = useState<UserProfileResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   // Toast feedback state
@@ -318,21 +329,23 @@ export default function RoutinesScreen() {
     if (!targetUserId || !activeClubId) return;
     setIsLoading(true);
     try {
-      const [routineData, specData, athleteDivesData] = await Promise.all([
+      const [routineData, specData, athleteDivesData, userProfileData] = await Promise.all([
         api.getRoutinesByUser(targetUserId).catch(() => [] as RoutineResponse[]),
         api.getSpecificationsByClub(activeClubId).catch(() => [] as RoutineSpecificationResponse[]),
         api.getAthleteDives(targetUserId).catch(() => [] as AthleteDiveStatusResponse[]),
+        targetUserId === user?.id ? Promise.resolve(user) : api.getUserById(targetUserId).catch(() => null),
       ]);
       setRoutines(routineData);
       setSpecs(specData);
       setAthleteDiveExecutionIds(new Set(athleteDivesData.map((d) => d.diveExecutionId)));
+      setAthleteProfile(userProfileData);
     } catch (e) {
       console.warn('Failed to load routines:', e);
       showToast(getErrorMessage(e), 'error');
     } finally {
       setIsLoading(false);
     }
-  }, [targetUserId, activeClubId, getErrorMessage]);
+  }, [targetUserId, activeClubId, user, getErrorMessage]);
 
   useEffect(() => {
     loadData();
@@ -416,13 +429,14 @@ export default function RoutinesScreen() {
 
   const confirmDeleteRoutine = async () => {
     if (!routineToDelete) return;
+    const routineTitle = getRoutineTitle(routineToDelete);
     setIsDeletingRoutine(true);
     try {
       await api.deleteRoutine(routineToDelete.id);
       showToast(
         t('routines.toasts.deleteSuccess', {
-          index: routineToDelete.index,
-          defaultValue: `Routine #${routineToDelete.index} gelöscht`,
+          name: routineTitle,
+          defaultValue: `Routine „${routineTitle}“ gelöscht`,
         }),
         'info'
       );
@@ -724,36 +738,59 @@ export default function RoutinesScreen() {
     const totalDD = routine.diveExecutions?.reduce((sum, de) => sum + (de.degreeOfDifficulty || 0), 0) ?? 0;
     const distinctGroups = new Set(routine.diveExecutions?.map((de) => de.groupNumber)).size;
     const isExpanded = expandedRoutines[routine.id] === true;
+    const isIncomplete = spec?.numberOfDives != null && diveCount < spec.numberOfDives;
+    const missingDives = spec?.numberOfDives != null ? spec.numberOfDives - diveCount : 0;
+
+    const athleteAge = athleteProfile?.age ?? (targetUserId === user?.id ? user?.age : undefined);
+    const ageCat = spec?.ageCategory;
+    let isAgeMismatch = false;
+    let ageCatRangeText = '';
+    if (ageCat && athleteAge != null) {
+      const minAge = Math.min(ageCat.fromYearOffset, ageCat.toYearOffset);
+      const maxAge = Math.max(ageCat.fromYearOffset, ageCat.toYearOffset);
+      isAgeMismatch = athleteAge < minAge || athleteAge > maxAge;
+      ageCatRangeText = minAge === maxAge ? `${minAge} J.` : `${minAge}–${maxAge} J.`;
+    }
 
     return (
       <View key={routine.id} style={styles.routineCard}>
         {/* Kopfzeile */}
-        <View style={[styles.routineHeader, !isExpanded && styles.routineHeaderCollapsed]}>
+        <View style={[styles.routineHeader, !spec && !isExpanded && styles.routineHeaderCollapsed]}>
           <TouchableOpacity
             style={styles.routineHeaderTouchable}
             onPress={() => toggleRoutineExpand(routine.id)}
             activeOpacity={0.7}
           >
-            <View style={styles.routineIndexBadge}>
-              <Text style={styles.routineIndexText}>#{routine.index}</Text>
-            </View>
             <View style={styles.routineHeaderInfo}>
-              <Text style={styles.routineTitle}>
-                {routine.displayName || spec?.name || t('routines.defaultRoutineTitle', { index: routine.index, defaultValue: `Routine #${routine.index}` })}
-              </Text>
+              <View style={styles.routineTitleRow}>
+                <Text style={styles.routineTitle}>
+                  {getRoutineTitle(routine)}
+                </Text>
+                {isIncomplete && (
+                  <View style={styles.incompleteBadge}>
+                    <Text style={styles.incompleteBadgeText}>
+                      ⚠️ {t('routines.incompleteWarning', {
+                        current: diveCount,
+                        required: spec.numberOfDives,
+                        defaultValue: `Unvollständig (${diveCount}/${spec.numberOfDives})`,
+                      })}
+                    </Text>
+                  </View>
+                )}
+                {isAgeMismatch && (
+                  <View style={styles.incompleteBadge}>
+                    <Text style={styles.incompleteBadgeText}>
+                      ⚠️ {t('routines.ageCategoryMismatchBadge', {
+                        category: spec?.ageCategory?.name,
+                        defaultValue: `AK unpassend (${spec?.ageCategory?.name})`,
+                      })}
+                    </Text>
+                  </View>
+                )}
+              </View>
               {routine.displayName && spec?.name && (
                 <Text style={styles.routineSpecName}>{spec.name}</Text>
               )}
-              <Text style={styles.routineSubtitle}>
-                {t('routines.diveCount', { count: diveCount })}
-                {spec
-                  ? ` · ${
-                      spec.numberOfDives != null
-                        ? t('routines.maxDivesAllowed', { max: spec.numberOfDives, defaultValue: `max. ${spec.numberOfDives} erlaubt` })
-                        : t('routines.maxDivesUnlimited', 'max. ∞ erlaubt')
-                    }`
-                  : ''}
-              </Text>
             </View>
           </TouchableOpacity>
           <View style={styles.routineHeaderRight}>
@@ -785,43 +822,47 @@ export default function RoutinesScreen() {
           </View>
         </View>
 
+        {/* Spezifikations-Details (immer sichtbar) */}
+        {spec && (
+          <View style={[styles.specDetails, !isExpanded && styles.specDetailsCollapsed]}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.specTagRow}>
+                {spec.numberOfDives != null && (
+                  <SpecTag label={t('routines.tags.dives', 'Sprünge')} value={String(spec.numberOfDives)} />
+                )}
+                {spec.numberOfGroups != null && (
+                  <SpecTag label={t('routines.tags.groups', 'Gruppen')} value={String(spec.numberOfGroups)} />
+                )}
+                {spec.maxDifficultyScore != null && (
+                  <SpecTag label={t('routines.tags.maxDifficulty', 'Max. SKG')} value={spec.maxDifficultyScore.toFixed(1)} />
+                )}
+                {spec.ageCategory && (
+                  <SpecTag
+                    label={t('routines.tags.ageCategory', 'Altersklasse')}
+                    value={spec.ageCategory.name}
+                    warning={isAgeMismatch}
+                  />
+                )}
+                {spec.gender && spec.gender !== 'ALL' && (
+                  <SpecTag label={t('routines.tags.gender', 'Geschlecht')} value={getGenderLabel(spec.gender)} />
+                )}
+                {spec.beginner && (
+                  <View style={[styles.specTag, styles.specTagHighlight]}>
+                    <Text style={styles.specTagHighlightText}>{t('routines.tags.beginner', 'Anfänger')}</Text>
+                  </View>
+                )}
+                {spec.juniorTableAllowed && (
+                  <View style={[styles.specTag, styles.specTagHighlight]}>
+                    <Text style={styles.specTagHighlightText}>{t('routines.tags.juniorTable', 'Juniortabelle')}</Text>
+                  </View>
+                )}
+              </View>
+            </ScrollView>
+          </View>
+        )}
+
         {isExpanded && (
           <>
-            {/* Spezifikations-Details */}
-            {spec && (
-              <View style={styles.specDetails}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View style={styles.specTagRow}>
-                    {spec.numberOfDives != null && (
-                      <SpecTag label={t('routines.tags.dives', 'Sprünge')} value={String(spec.numberOfDives)} />
-                    )}
-                    {spec.numberOfGroups != null && (
-                      <SpecTag label={t('routines.tags.groups', 'Gruppen')} value={String(spec.numberOfGroups)} />
-                    )}
-                    {spec.maxDifficultyScore != null && (
-                      <SpecTag label={t('routines.tags.maxDifficulty', 'Max. SKG')} value={spec.maxDifficultyScore.toFixed(1)} />
-                    )}
-                    {spec.ageCategory && (
-                      <SpecTag label={t('routines.tags.ageCategory', 'Altersklasse')} value={spec.ageCategory.name} />
-                    )}
-                    {spec.gender && spec.gender !== 'ALL' && (
-                      <SpecTag label={t('routines.tags.gender', 'Geschlecht')} value={getGenderLabel(spec.gender)} />
-                    )}
-                    {spec.beginner && (
-                      <View style={[styles.specTag, styles.specTagHighlight]}>
-                        <Text style={styles.specTagHighlightText}>{t('routines.tags.beginner', 'Anfänger')}</Text>
-                      </View>
-                    )}
-                    {spec.juniorTableAllowed && (
-                      <View style={[styles.specTag, styles.specTagHighlight]}>
-                        <Text style={styles.specTagHighlightText}>{t('routines.tags.juniorTable', 'Juniortabelle')}</Text>
-                      </View>
-                    )}
-                  </View>
-                </ScrollView>
-              </View>
-            )}
-
             {/* Kennzahlen-Leiste */}
             <View style={styles.statsBar}>
               <View style={styles.statItem}>
@@ -848,7 +889,7 @@ export default function RoutinesScreen() {
               <View style={styles.statDivider} />
               <View style={styles.statItem}>
                 <Text style={styles.statLabel}>{t('routines.stats.diveCount', 'Sprung-Anzahl')}</Text>
-                <Text style={styles.statValue}>
+                <Text style={[styles.statValue, isIncomplete && styles.statValueWarning]}>
                   {diveCount}
                   {spec?.numberOfDives != null ? (
                     <Text style={styles.statTarget}> / {spec.numberOfDives}</Text>
@@ -859,6 +900,30 @@ export default function RoutinesScreen() {
 
             {/* Sprünge in der Routine */}
             <View style={styles.divesSection}>
+              {isIncomplete && (
+                <View style={styles.incompleteBanner}>
+                  <Text style={styles.incompleteBannerText}>
+                    ⚠️ {t('routines.incompleteBannerText', {
+                      count: missingDives,
+                      current: diveCount,
+                      required: spec.numberOfDives,
+                      defaultValue: `Serie unvollständig: Noch ${missingDives} ${missingDives === 1 ? 'Sprung' : 'Sprünge'} erforderlich (${diveCount}/${spec.numberOfDives} vorhanden).`,
+                    })}
+                  </Text>
+                </View>
+              )}
+              {isAgeMismatch && (
+                <View style={styles.incompleteBanner}>
+                  <Text style={styles.incompleteBannerText}>
+                    ⚠️ {t('routines.ageCategoryMismatchBanner', {
+                      category: spec?.ageCategory?.name,
+                      athleteAge,
+                      range: ageCatRangeText,
+                      defaultValue: `Altersklasse unpassend: „${spec?.ageCategory?.name}“ (${ageCatRangeText}) passt nicht zum Alter des Sportlers (${athleteAge} Jahre).`,
+                    })}
+                  </Text>
+                </View>
+              )}
               <View style={styles.divesSectionHeader}>
                 <Text style={styles.divesSectionTitle}>{t('routines.divesSectionTitle', 'Sprünge in dieser Routine')}</Text>
                 <View style={styles.divesHeaderActions}>
@@ -1188,10 +1253,7 @@ export default function RoutinesScreen() {
           <Toast toast={toast} onDismiss={() => setToast(null)} />
           <View style={styles.modalSheet}>
             <Text style={styles.modalTitle}>
-              {t('routines.editModal.title', {
-                index: editingRoutine?.index,
-                defaultValue: `Routine #${editingRoutine?.index} bearbeiten`,
-              })}
+              {t('routines.editModal.title', 'Routine bearbeiten')}
             </Text>
 
             <Text style={styles.fieldLabel}>{t('routines.editModal.displayNameLabel', 'Anzeigename')}</Text>
@@ -1254,11 +1316,8 @@ export default function RoutinesScreen() {
                 <Text style={styles.modalTitle}>{t('routines.addDiveModal.title', 'Sprung hinzufügen')}</Text>
                 <Text style={styles.addDiveSub}>
                   {t('routines.addDiveModal.subtitle', {
-                    index: targetRoutineForAdd?.index,
-                    name: targetRoutineForAdd?.displayName ? `(${targetRoutineForAdd.displayName})` : '',
-                    defaultValue: `zu Routine #${targetRoutineForAdd?.index} ${
-                      targetRoutineForAdd?.displayName ? `(${targetRoutineForAdd.displayName})` : ''
-                    }`,
+                    name: getRoutineTitle(targetRoutineForAdd),
+                    defaultValue: `zu ${getRoutineTitle(targetRoutineForAdd)}`,
                   })}
                 </Text>
               </View>
@@ -1557,11 +1616,8 @@ export default function RoutinesScreen() {
                 <Text style={styles.modalTitle}>{t('routines.sortModal.title', 'Sprünge sortieren')}</Text>
                 <Text style={styles.sortModalSub}>
                   {t('routines.sortModal.subtitle', {
-                    index: sortModalRoutine?.index,
-                    name: sortModalRoutine?.displayName ? `(${sortModalRoutine.displayName})` : '',
-                    defaultValue: `Routine #${sortModalRoutine?.index} ${
-                      sortModalRoutine?.displayName ? `(${sortModalRoutine.displayName})` : ''
-                    }`,
+                    name: getRoutineTitle(sortModalRoutine),
+                    defaultValue: getRoutineTitle(sortModalRoutine),
                   })}
                 </Text>
               </View>
@@ -1699,11 +1755,8 @@ export default function RoutinesScreen() {
         message={
           routineToDelete
             ? t('routines.deleteModal.message', {
-                index: routineToDelete.index,
-                name: routineToDelete.displayName ? ` (${routineToDelete.displayName})` : '',
-                defaultValue: `Möchtest du Routine #${routineToDelete.index}${
-                  routineToDelete.displayName ? ` (${routineToDelete.displayName})` : ''
-                } wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`,
+                name: getRoutineTitle(routineToDelete),
+                defaultValue: `Möchtest du die Routine „${getRoutineTitle(routineToDelete)}“ wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`,
               })
             : ''
         }
@@ -1723,8 +1776,8 @@ export default function RoutinesScreen() {
           diveToRemove
             ? t('routines.removeDiveModal.message', {
                 diveName: diveToRemove.diveName,
-                index: diveToRemove.routine.index,
-                defaultValue: `Möchtest du „${diveToRemove.diveName}“ wirklich aus Routine #${diveToRemove.routine.index} entfernen?`,
+                routineName: getRoutineTitle(diveToRemove.routine),
+                defaultValue: `Möchtest du „${diveToRemove.diveName}“ wirklich aus „${getRoutineTitle(diveToRemove.routine)}“ entfernen?`,
               })
             : ''
         }
@@ -1824,30 +1877,30 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     fontWeight: FontWeight.bold,
   },
-  routineIndexBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: BorderRadius.sm,
-    backgroundColor: Colors.primarySurface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: Spacing.md,
-  },
-  routineIndexText: {
-    fontSize: FontSize.md,
-    fontWeight: FontWeight.bold,
-    color: Colors.primary,
-  },
   routineHeaderInfo: { flex: 1 },
+  routineTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: Spacing.xs,
+  },
   routineTitle: {
     fontSize: FontSize.md,
     fontWeight: FontWeight.bold,
     color: Colors.textPrimary,
   },
-  routineSubtitle: {
-    fontSize: FontSize.xs,
-    color: Colors.textTertiary,
-    marginTop: 2,
+  incompleteBadge: {
+    backgroundColor: Colors.warningBg,
+    borderColor: Colors.warning,
+    borderWidth: 1,
+    paddingHorizontal: Spacing.xs,
+    paddingVertical: 1,
+    borderRadius: BorderRadius.xs,
+  },
+  incompleteBadgeText: {
+    fontSize: 10,
+    fontWeight: FontWeight.bold,
+    color: Colors.warning,
   },
   routineSpecName: {
     fontSize: FontSize.xs,
@@ -1876,6 +1929,9 @@ const styles = StyleSheet.create({
     borderTopColor: Colors.borderLight,
     paddingTop: Spacing.sm,
   },
+  specDetailsCollapsed: {
+    marginBottom: 0,
+  },
   specTagRow: {
     flexDirection: 'row',
     gap: Spacing.xs,
@@ -1887,16 +1943,27 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.xs,
     alignItems: 'center',
   },
+  specTagWarning: {
+    backgroundColor: Colors.warningBg,
+    borderColor: Colors.warning,
+    borderWidth: 1,
+  },
   specTagLabel: {
     fontSize: 10,
     color: Colors.textTertiary,
     textTransform: 'uppercase',
     letterSpacing: 0.3,
   },
+  specTagLabelWarning: {
+    color: Colors.warning,
+  },
   specTagValue: {
     fontSize: FontSize.sm,
     fontWeight: FontWeight.bold,
     color: Colors.primary,
+  },
+  specTagValueWarning: {
+    color: Colors.warning,
   },
   specTagHighlight: {
     backgroundColor: Colors.primarySurface,
@@ -1941,10 +2008,31 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     marginTop: 2,
   },
+  statValueWarning: {
+    color: Colors.warning,
+  },
   statTarget: {
     fontSize: FontSize.xs,
     color: Colors.textTertiary,
     fontWeight: FontWeight.normal,
+  },
+
+  // Incomplete Banner
+  incompleteBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.warningBg,
+    borderRadius: BorderRadius.sm,
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    marginBottom: Spacing.sm,
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.warning,
+  },
+  incompleteBannerText: {
+    fontSize: FontSize.xs,
+    color: Colors.warning,
+    fontWeight: FontWeight.medium,
   },
 
   // Dives Section
