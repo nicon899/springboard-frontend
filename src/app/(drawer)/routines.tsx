@@ -37,21 +37,107 @@ import ConfirmModal from '../../components/modals/ConfirmModal';
 // Hilfsfunktionen & Konstanten
 // ────────────────────────────────────────────────────────────
 
-const GENDER_LABELS: Record<string, string> = {
-  ALL: 'Alle',
-  MALE: 'Männlich',
-  FEMALE: 'Weiblich',
-  DIVERSE: 'Divers',
-};
-
-const POSITION_NAMES: Record<string, string> = {
-  A: 'Gestreckt',
-  B: 'Gehechtet',
-  C: 'Gehockt',
-  D: 'Frei',
-};
-
 const HEIGHT_FILTERS = ['ALL', '1m', '3m', '5m', '7.5m', '10m'] as const;
+
+export const JUNIOR_TABLE_CODES = new Set([
+  '100', '200', '010', '020',
+  '5101', '5102', '5201', '5021',
+]);
+
+export interface DiveValidationResult {
+  isValid: boolean;
+  reasonKey?:
+    | 'ROUTINE_DUPLICATE_DIVE_NUMBER'
+    | 'ROUTINE_MAX_DIVES_EXCEEDED'
+    | 'ROUTINE_JUNIOR_TABLE_NOT_ALLOWED'
+    | 'ROUTINE_MAX_DIFFICULTY_EXCEEDED'
+    | 'ROUTINE_MIN_GROUPS_NOT_REACHABLE';
+  params?: Record<string, any>;
+}
+
+export function validateDiveForRoutine(
+  routine: RoutineResponse | null | undefined,
+  candidate: DiveExecutionResponse
+): DiveValidationResult {
+  if (!routine) return { isValid: true };
+
+  const existing = routine.diveExecutions || [];
+
+  // 1. Duplicate dive number (irrespective of execution/position)
+  const isDuplicate = existing.some(
+    (de) => de.diveCode.toLowerCase() === candidate.diveCode.toLowerCase()
+  );
+  if (isDuplicate) {
+    return {
+      isValid: false,
+      reasonKey: 'ROUTINE_DUPLICATE_DIVE_NUMBER',
+      params: { diveCode: candidate.diveCode },
+    };
+  }
+
+  const spec = routine.template;
+  if (!spec) return { isValid: true };
+
+  // 2. Max number of dives
+  if (spec.numberOfDives != null && existing.length >= spec.numberOfDives) {
+    return {
+      isValid: false,
+      reasonKey: 'ROUTINE_MAX_DIVES_EXCEEDED',
+      params: { numberOfDives: spec.numberOfDives },
+    };
+  }
+
+  // 3. Junior table (Nachwuchstabelle)
+  if (spec.juniorTableAllowed === false && JUNIOR_TABLE_CODES.has(candidate.diveCode)) {
+    return {
+      isValid: false,
+      reasonKey: 'ROUTINE_JUNIOR_TABLE_NOT_ALLOWED',
+      params: { diveCode: candidate.diveCode },
+    };
+  }
+
+  // 4. Max difficulty score (SKG)
+  if (spec.maxDifficultyScore != null) {
+    const currentSum = existing.reduce((sum, de) => sum + (de.degreeOfDifficulty || 0), 0);
+    const newTotal = currentSum + (candidate.degreeOfDifficulty || 0);
+    if (newTotal > spec.maxDifficultyScore + 0.0001) {
+      return {
+        isValid: false,
+        reasonKey: 'ROUTINE_MAX_DIFFICULTY_EXCEEDED',
+        params: {
+          maxDifficulty: spec.maxDifficultyScore,
+          currentDifficulty: Math.round(currentSum * 10) / 10,
+          newDifficulty: Math.round(newTotal * 10) / 10,
+        },
+      };
+    }
+  }
+
+  // 5. Min number of groups reachable
+  if (spec.numberOfGroups != null && spec.numberOfDives != null) {
+    const groupsAfterAdd = new Set(existing.map((de) => de.groupNumber));
+    groupsAfterAdd.add(candidate.groupNumber);
+    const distinctGroups = groupsAfterAdd.size;
+    const missingGroups = spec.numberOfGroups - distinctGroups;
+
+    if (missingGroups > 0) {
+      const slotsAfterAdd = spec.numberOfDives - existing.length - 1;
+      if (missingGroups > slotsAfterAdd) {
+        return {
+          isValid: false,
+          reasonKey: 'ROUTINE_MIN_GROUPS_NOT_REACHABLE',
+          params: {
+            numberOfGroups: spec.numberOfGroups,
+            missingGroups,
+            slotsRemaining: slotsAfterAdd,
+          },
+        };
+      }
+    }
+  }
+
+  return { isValid: true };
+}
 
 function parseErrorMessage(e: any, t?: (key: string, options?: any) => string): string {
   if (!e) {
@@ -114,7 +200,7 @@ function SpecTag({ label, value }: { label: string; value: string }) {
 
 export default function RoutinesScreen() {
   const router = useRouter();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { user, activeClubId, isTrainerOrAdmin } = useAuth();
   const params = useLocalSearchParams<{ athleteId?: string; athleteName?: string }>();
 
@@ -123,6 +209,42 @@ export default function RoutinesScreen() {
   const athleteLabel = params.athleteName ?? `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim();
 
   const getErrorMessage = useCallback((e: any) => parseErrorMessage(e, t), [t]);
+
+  const getGenderLabel = useCallback((g: string) => {
+    switch (g) {
+      case 'ALL':
+        return t('routines.genderAll', 'Alle');
+      case 'MALE':
+        return t('routines.genderMale', 'Männlich');
+      case 'FEMALE':
+        return t('routines.genderFemale', 'Weiblich');
+      case 'DIVERSE':
+        return t('routines.genderDiverse', 'Divers');
+      default:
+        return g;
+    }
+  }, [t]);
+
+  const getPositionName = useCallback((pos: string) => {
+    switch (pos) {
+      case 'A':
+        return t('routines.positions.A', 'Gestreckt');
+      case 'B':
+        return t('routines.positions.B', 'Gehechtet');
+      case 'C':
+        return t('routines.positions.C', 'Gehockt');
+      case 'D':
+        return t('routines.positions.D', 'Frei');
+      default:
+        return pos;
+    }
+  }, [t]);
+
+  const getGroupName = useCallback((grpNumber: number) => {
+    const grp = DIVE_GROUP_NAMES[grpNumber];
+    if (!grp) return `Gr. ${grpNumber}`;
+    return i18n.language === 'en' ? grp.en : grp.de;
+  }, [i18n.language]);
 
   const [routines, setRoutines] = useState<RoutineResponse[]>([]);
   const [specs, setSpecs] = useState<RoutineSpecificationResponse[]>([]);
@@ -158,6 +280,7 @@ export default function RoutinesScreen() {
   const [diveSearchQuery, setDiveSearchQuery] = useState('');
   const [selectedHeightFilter, setSelectedHeightFilter] = useState<string>('ALL');
   const [selectedGroupFilter, setSelectedGroupFilter] = useState<number | null>(null);
+  const [onlyValidFilter, setOnlyValidFilter] = useState(false);
   const [isAddingDiveId, setIsAddingDiveId] = useState<number | null>(null);
 
   // Delete confirmation states
@@ -228,7 +351,7 @@ export default function RoutinesScreen() {
       setCreateModalVisible(false);
       setSelectedSpecId(null);
       setCreateDisplayName('');
-      showToast('Routine erfolgreich angelegt', 'success');
+      showToast(t('routines.toasts.createSuccess', 'Routine erfolgreich angelegt'), 'success');
       await loadData();
     } catch (e: any) {
       showToast(getErrorMessage(e), 'error');
@@ -254,7 +377,7 @@ export default function RoutinesScreen() {
         displayName: editDisplayName.trim() || undefined,
       });
       setEditModalVisible(false);
-      showToast('Routine aktualisiert', 'success');
+      showToast(t('routines.toasts.updateSuccess', 'Routine aktualisiert'), 'success');
       await loadData();
     } catch (e: any) {
       showToast(getErrorMessage(e), 'error');
@@ -273,7 +396,13 @@ export default function RoutinesScreen() {
     setIsDeletingRoutine(true);
     try {
       await api.deleteRoutine(routineToDelete.id);
-      showToast(`Routine #${routineToDelete.index} gelöscht`, 'info');
+      showToast(
+        t('routines.toasts.deleteSuccess', {
+          index: routineToDelete.index,
+          defaultValue: `Routine #${routineToDelete.index} gelöscht`,
+        }),
+        'info'
+      );
       setRoutineToDelete(null);
       await loadData();
     } catch (e: any) {
@@ -287,14 +416,29 @@ export default function RoutinesScreen() {
   const openAddDiveModal = (routine: RoutineResponse) => {
     setTargetRoutineForAdd(routine);
     setDiveSearchQuery('');
-    // selectedHeightFilter bleibt erhalten (temporär für die Session)
+    setSelectedHeightFilter('ALL');
     setSelectedGroupFilter(null);
+    setOnlyValidFilter(false);
     setAddDiveModalVisible(true);
     loadCatalog();
   };
 
   const handleAddDive = async (execution: DiveExecutionResponse) => {
     if (!targetRoutineForAdd) return;
+
+    // Validate dive against all routine and spec constraints
+    const validation = validateDiveForRoutine(targetRoutineForAdd, execution);
+    if (!validation.isValid) {
+      const errorMsg = validation.reasonKey
+        ? t(`routines.errors.${validation.reasonKey}`, {
+            ...validation.params,
+            defaultValue: 'Sprung ist für diese Routine nicht zulässig.',
+          })
+        : 'Sprung ist für diese Routine nicht zulässig.';
+      showToast(errorMsg, 'error');
+      return;
+    }
+
     setIsAddingDiveId(execution.id);
     try {
       const updatedRoutine = await api.addDiveToRoutine(targetRoutineForAdd.id, {
@@ -305,7 +449,13 @@ export default function RoutinesScreen() {
       );
       setTargetRoutineForAdd(updatedRoutine);
       setAddDiveModalVisible(false);
-      showToast(`Sprung ${execution.diveCode}${execution.execution} hinzugefügt`, 'success');
+      showToast(
+        t('routines.toasts.addDiveSuccess', {
+          dive: `${execution.diveCode}${execution.execution}`,
+          defaultValue: `Sprung ${execution.diveCode}${execution.execution} hinzugefügt`,
+        }),
+        'success'
+      );
     } catch (e: any) {
       showToast(getErrorMessage(e), 'error');
     } finally {
@@ -329,7 +479,7 @@ export default function RoutinesScreen() {
       setRoutines((prev) =>
         prev.map((r) => (r.id === updatedRoutine.id ? updatedRoutine : r))
       );
-      showToast('Sprung entfernt', 'info');
+      showToast(t('routines.toasts.removeDiveSuccess', 'Sprung entfernt'), 'info');
       setDiveToRemove(null);
     } catch (e: any) {
       showToast(getErrorMessage(e), 'error');
@@ -418,13 +568,63 @@ export default function RoutinesScreen() {
         );
       }
       setSortModalVisible(false);
-      showToast('Reihenfolge erfolgreich gespeichert', 'success');
+      showToast(t('routines.toasts.reorderSuccess', 'Reihenfolge erfolgreich gespeichert'), 'success');
     } catch (e: any) {
       showToast(getErrorMessage(e), 'error');
     } finally {
       setIsSavingOrder(false);
     }
   };
+
+  // ── Match Counts (Valide vs. Gesamt für aktuelle Filter) ──
+  const { validCount, totalMatchingCount } = useMemo(() => {
+    let valid = 0;
+    let total = 0;
+    const q = diveSearchQuery.trim().toLowerCase();
+    const qClean = q.replace(/\s+/g, '');
+
+    for (const item of catalogExecutions) {
+      if (q) {
+        const fullCode = `${item.diveCode}${item.execution || ''}`.toLowerCase();
+        const fullCodeWithSpace = `${item.diveCode} ${item.execution || ''}`.toLowerCase();
+        const posName = getPositionName(item.execution).toLowerCase();
+
+        const matchCode =
+          item.diveCode.toLowerCase().includes(q) ||
+          fullCode.includes(qClean) ||
+          fullCodeWithSpace.includes(q);
+
+        const matchNameDe = item.nameDe?.toLowerCase().includes(q);
+        const matchNameEn = item.nameEn?.toLowerCase().includes(q);
+        const matchPos = posName.includes(q);
+
+        if (!matchCode && !matchNameDe && !matchNameEn && !matchPos) continue;
+      }
+
+      if (selectedHeightFilter !== 'ALL') {
+        const itemUiHeight = BACKEND_TO_HEIGHT[item.height];
+        if (itemUiHeight !== selectedHeightFilter) continue;
+      }
+
+      if (selectedGroupFilter !== null) {
+        if (item.groupNumber !== selectedGroupFilter) continue;
+      }
+
+      total++;
+      if (validateDiveForRoutine(targetRoutineForAdd, item).isValid) {
+        valid++;
+      }
+    }
+
+    return { validCount: valid, totalMatchingCount: total };
+  }, [
+    catalogExecutions,
+    diveSearchQuery,
+    selectedHeightFilter,
+    selectedGroupFilter,
+    targetRoutineForAdd,
+    getPositionName,
+  ]);
 
   // ── Gefilterte Sprungvarianten für Modal ──
   const filteredCatalogExecutions = useMemo(() => {
@@ -435,7 +635,7 @@ export default function RoutinesScreen() {
       if (q) {
         const fullCode = `${item.diveCode}${item.execution || ''}`.toLowerCase();
         const fullCodeWithSpace = `${item.diveCode} ${item.execution || ''}`.toLowerCase();
-        const posName = POSITION_NAMES[item.execution]?.toLowerCase() || '';
+        const posName = getPositionName(item.execution).toLowerCase();
 
         const matchCode =
           item.diveCode.toLowerCase().includes(q) ||
@@ -460,9 +660,23 @@ export default function RoutinesScreen() {
         if (item.groupNumber !== selectedGroupFilter) return false;
       }
 
+      // Valide-Filter
+      if (onlyValidFilter) {
+        const validation = validateDiveForRoutine(targetRoutineForAdd, item);
+        if (!validation.isValid) return false;
+      }
+
       return true;
     });
-  }, [catalogExecutions, diveSearchQuery, selectedHeightFilter, selectedGroupFilter]);
+  }, [
+    catalogExecutions,
+    diveSearchQuery,
+    selectedHeightFilter,
+    selectedGroupFilter,
+    onlyValidFilter,
+    targetRoutineForAdd,
+    getPositionName,
+  ]);
 
   // ── Routine-Karte ──
   const renderRoutine = (routine: RoutineResponse) => {
@@ -480,14 +694,20 @@ export default function RoutinesScreen() {
           </View>
           <View style={styles.routineHeaderInfo}>
             <Text style={styles.routineTitle}>
-              {routine.displayName || spec?.name || `Routine #${routine.index}`}
+              {routine.displayName || spec?.name || t('routines.defaultRoutineTitle', { index: routine.index, defaultValue: `Routine #${routine.index}` })}
             </Text>
             {routine.displayName && spec?.name && (
               <Text style={styles.routineSpecName}>{spec.name}</Text>
             )}
             <Text style={styles.routineSubtitle}>
-              {diveCount} {diveCount === 1 ? 'Sprung' : 'Sprünge'}
-              {spec ? ` · max. ${spec.numberOfDives ?? '∞'} erlaubt` : ''}
+              {t('routines.diveCount', { count: diveCount })}
+              {spec
+                ? ` · ${
+                    spec.numberOfDives != null
+                      ? t('routines.maxDivesAllowed', { max: spec.numberOfDives, defaultValue: `max. ${spec.numberOfDives} erlaubt` })
+                      : t('routines.maxDivesUnlimited', 'max. ∞ erlaubt')
+                  }`
+                : ''}
             </Text>
           </View>
           {canEdit && (
@@ -516,28 +736,28 @@ export default function RoutinesScreen() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <View style={styles.specTagRow}>
                 {spec.numberOfDives != null && (
-                  <SpecTag label="Sprünge" value={String(spec.numberOfDives)} />
+                  <SpecTag label={t('routines.tags.dives', 'Sprünge')} value={String(spec.numberOfDives)} />
                 )}
                 {spec.numberOfGroups != null && (
-                  <SpecTag label="Gruppen" value={String(spec.numberOfGroups)} />
+                  <SpecTag label={t('routines.tags.groups', 'Gruppen')} value={String(spec.numberOfGroups)} />
                 )}
                 {spec.maxDifficultyScore != null && (
-                  <SpecTag label="Max. DD" value={spec.maxDifficultyScore.toFixed(1)} />
+                  <SpecTag label={t('routines.tags.maxDifficulty', 'Max. SKG')} value={spec.maxDifficultyScore.toFixed(1)} />
                 )}
                 {spec.ageCategory && (
-                  <SpecTag label="Altersklasse" value={spec.ageCategory.name} />
+                  <SpecTag label={t('routines.tags.ageCategory', 'Altersklasse')} value={spec.ageCategory.name} />
                 )}
                 {spec.gender && spec.gender !== 'ALL' && (
-                  <SpecTag label="Geschlecht" value={GENDER_LABELS[spec.gender] ?? spec.gender} />
+                  <SpecTag label={t('routines.tags.gender', 'Geschlecht')} value={getGenderLabel(spec.gender)} />
                 )}
                 {spec.beginner && (
                   <View style={[styles.specTag, styles.specTagHighlight]}>
-                    <Text style={styles.specTagHighlightText}>Anfänger</Text>
+                    <Text style={styles.specTagHighlightText}>{t('routines.tags.beginner', 'Anfänger')}</Text>
                   </View>
                 )}
                 {spec.juniorTableAllowed && (
                   <View style={[styles.specTag, styles.specTagHighlight]}>
-                    <Text style={styles.specTagHighlightText}>Juniortabelle</Text>
+                    <Text style={styles.specTagHighlightText}>{t('routines.tags.juniorTable', 'Juniortabelle')}</Text>
                   </View>
                 )}
               </View>
@@ -548,7 +768,7 @@ export default function RoutinesScreen() {
         {/* Kennzahlen-Leiste */}
         <View style={styles.statsBar}>
           <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Gesamt-DD</Text>
+            <Text style={styles.statLabel}>{t('routines.stats.totalDifficulty', 'Gesamt-SKG')}</Text>
             <Text style={styles.statValue}>
               {totalDD.toFixed(1)}
               {spec?.maxDifficultyScore != null ? (
@@ -558,17 +778,19 @@ export default function RoutinesScreen() {
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Gruppen</Text>
+            <Text style={styles.statLabel}>{t('routines.stats.groups', 'Gruppen')}</Text>
             <Text style={styles.statValue}>
               {distinctGroups}
               {spec?.numberOfGroups != null ? (
-                <Text style={styles.statTarget}> / min. {spec.numberOfGroups}</Text>
+                <Text style={styles.statTarget}>
+                  {t('routines.stats.minGroups', { min: spec.numberOfGroups, defaultValue: ` / min. ${spec.numberOfGroups}` })}
+                </Text>
               ) : null}
             </Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Sprung-Anzahl</Text>
+            <Text style={styles.statLabel}>{t('routines.stats.diveCount', 'Sprung-Anzahl')}</Text>
             <Text style={styles.statValue}>
               {diveCount}
               {spec?.numberOfDives != null ? (
@@ -581,7 +803,7 @@ export default function RoutinesScreen() {
         {/* Sprünge in der Routine */}
         <View style={styles.divesSection}>
           <View style={styles.divesSectionHeader}>
-            <Text style={styles.divesSectionTitle}>Sprünge in dieser Routine</Text>
+            <Text style={styles.divesSectionTitle}>{t('routines.divesSectionTitle', 'Sprünge in dieser Routine')}</Text>
             <View style={styles.divesHeaderActions}>
               {canEdit && diveCount > 1 && (
                 <TouchableOpacity
@@ -589,7 +811,7 @@ export default function RoutinesScreen() {
                   onPress={() => openSortModal(routine)}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.sortInlineBtnText}>⇅ Sortieren</Text>
+                  <Text style={styles.sortInlineBtnText}>{t('routines.sortBtn', '⇅ Sortieren')}</Text>
                 </TouchableOpacity>
               )}
               {canEdit && (
@@ -598,7 +820,7 @@ export default function RoutinesScreen() {
                   onPress={() => openAddDiveModal(routine)}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.addDiveInlineText}>+ Sprung hinzufügen</Text>
+                  <Text style={styles.addDiveInlineText}>{t('routines.addDiveBtn', '+ Sprung hinzufügen')}</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -606,22 +828,23 @@ export default function RoutinesScreen() {
 
           {diveCount === 0 ? (
             <View style={styles.emptyDivesContainer}>
-              <Text style={styles.emptyDivesText}>Noch keine Sprünge in dieser Routine.</Text>
+              <Text style={styles.emptyDivesText}>{t('routines.noDivesText', 'Noch keine Sprünge in dieser Routine.')}</Text>
               {canEdit && (
                 <TouchableOpacity
                   style={styles.addFirstDiveBtn}
                   onPress={() => openAddDiveModal(routine)}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.addFirstDiveBtnText}>+ Ersten Sprung hinzufügen</Text>
+                  <Text style={styles.addFirstDiveBtnText}>{t('routines.addFirstDiveBtn', '+ Ersten Sprung hinzufügen')}</Text>
                 </TouchableOpacity>
               )}
             </View>
           ) : (
             routine.diveExecutions.map((de, idx) => {
               const heightText = BACKEND_TO_HEIGHT[de.height] ?? de.height;
-              const posLabel = POSITION_NAMES[de.execution] ?? de.execution;
-              const groupName = DIVE_GROUP_NAMES[de.groupNumber]?.de ?? `Gr. ${de.groupNumber}`;
+              const posLabel = getPositionName(de.execution);
+              const groupName = getGroupName(de.groupNumber);
+              const diveTitle = (i18n.language === 'en' ? (de.nameEn || de.nameDe) : (de.nameDe || de.nameEn)) || de.diveCode;
               const isFirst = idx === 0;
               const isLast = idx === routine.diveExecutions.length - 1;
               const isReorderingThis = isReorderingRoutineId === routine.id;
@@ -666,12 +889,17 @@ export default function RoutinesScreen() {
                   </View>
                   <View style={styles.diveInfo}>
                     <Text style={styles.diveName} numberOfLines={1}>
-                      {de.nameDe || de.nameEn || de.diveCode}
+                      {diveTitle}
                     </Text>
                     <View style={styles.diveMetaRow}>
                       <Text style={styles.diveMetaBadge}>{heightText}</Text>
                       <Text style={styles.diveMetaBadge}>{posLabel}</Text>
-                      <Text style={styles.diveMetaBadge}>DD {de.degreeOfDifficulty.toFixed(1)}</Text>
+                      <Text style={styles.diveMetaBadge}>
+                        {t('routines.difficultyBadge', {
+                          dd: de.degreeOfDifficulty.toFixed(1),
+                          defaultValue: `SKG ${de.degreeOfDifficulty.toFixed(1)}`,
+                        })}
+                      </Text>
                       <Text style={styles.diveMetaText}>{groupName}</Text>
                     </View>
                   </View>
@@ -682,7 +910,7 @@ export default function RoutinesScreen() {
                         promptRemoveDive(
                           routine,
                           de.id,
-                          `${de.diveCode}${de.execution}${de.nameDe ? ` (${de.nameDe})` : ''}`
+                          `${de.diveCode}${de.execution}${diveTitle !== de.diveCode ? ` (${diveTitle})` : ''}`
                         )
                       }
                       activeOpacity={0.7}
@@ -722,7 +950,13 @@ export default function RoutinesScreen() {
           activeOpacity={0.8}
         >
           <Text style={[styles.dropdownBtnText, !selectedSpec && styles.dropdownPlaceholder]}>
-            {selectedSpec ? selectedSpec.name || `Spezifikation #${selectedSpec.id}` : 'Spezifikation wählen…'}
+            {selectedSpec
+              ? selectedSpec.name ||
+                t('routineSpecifications.defaultSpecName', {
+                  id: selectedSpec.id,
+                  defaultValue: `Spezifikation #${selectedSpec.id}`,
+                })
+              : t('routines.dropdown.selectSpec', 'Spezifikation wählen…')}
           </Text>
           <Text style={styles.dropdownChevron}>{open ? '▲' : '▼'}</Text>
         </TouchableOpacity>
@@ -734,7 +968,7 @@ export default function RoutinesScreen() {
               onPress={() => { onSelect(null); onToggle(); }}
             >
               <Text style={[styles.dropdownItemText, value === null && styles.dropdownItemTextActive]}>
-                Keine Spezifikation
+                {t('routines.dropdown.noSpec', 'Keine Spezifikation')}
               </Text>
             </TouchableOpacity>
             {specs.map((s) => (
@@ -744,13 +978,24 @@ export default function RoutinesScreen() {
                 onPress={() => { onSelect(s.id); onToggle(); }}
               >
                 <Text style={[styles.dropdownItemText, value === s.id && styles.dropdownItemTextActive]}>
-                  {s.name || `Spezifikation #${s.id}`}
+                  {s.name ||
+                    t('routineSpecifications.defaultSpecName', {
+                      id: s.id,
+                      defaultValue: `Spezifikation #${s.id}`,
+                    })}
                 </Text>
                 {(s.numberOfDives != null || s.maxDifficultyScore != null) && (
                   <Text style={styles.dropdownItemMeta}>
                     {[
-                      s.numberOfDives != null ? `${s.numberOfDives} Sprünge` : null,
-                      s.maxDifficultyScore != null ? `DD max. ${s.maxDifficultyScore}` : null,
+                      s.numberOfDives != null
+                        ? t('routines.diveCount', { count: s.numberOfDives })
+                        : null,
+                      s.maxDifficultyScore != null
+                        ? t('routines.dropdown.maxDifficultyShort', {
+                            max: s.maxDifficultyScore,
+                            defaultValue: `SKG max. ${s.maxDifficultyScore}`,
+                          })
+                        : null,
                     ]
                       .filter(Boolean)
                       .join(' · ')}
@@ -759,7 +1004,7 @@ export default function RoutinesScreen() {
               </TouchableOpacity>
             ))}
             <TouchableOpacity style={styles.createSpecLink} onPress={onCreateNew} activeOpacity={0.7}>
-              <Text style={styles.createSpecLinkText}>＋ Neue Spezifikation anlegen</Text>
+              <Text style={styles.createSpecLinkText}>{t('routines.dropdown.createSpecLink', '＋ Neue Spezifikation anlegen')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -784,7 +1029,7 @@ export default function RoutinesScreen() {
         {/* Header */}
         <View style={styles.listHeader}>
           <Text style={styles.listTitle}>
-            {routines.length} {routines.length === 1 ? 'Routine' : 'Routinen'}
+            {t('routines.routineCount', { count: routines.length })}
           </Text>
           {canEdit && (
             <TouchableOpacity
@@ -792,7 +1037,7 @@ export default function RoutinesScreen() {
               onPress={() => { setSelectedSpecId(null); setCreateModalVisible(true); }}
               activeOpacity={0.8}
             >
-              <Text style={styles.addBtnText}>+ Neue Routine</Text>
+              <Text style={styles.addBtnText}>{t('routines.newRoutineBtn', '+ Neue Routine')}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -800,14 +1045,16 @@ export default function RoutinesScreen() {
         {isLoading ? (
           <View style={styles.emptyContainer}>
             <ActivityIndicator size="large" color={Colors.primary} />
-            <Text style={styles.emptyText}>Lade Routinen…</Text>
+            <Text style={styles.emptyText}>{t('routines.loading', 'Lade Routinen…')}</Text>
           </View>
         ) : routines.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyEmoji}>📋</Text>
-            <Text style={styles.emptyTitle}>Keine Routinen</Text>
+            <Text style={styles.emptyTitle}>{t('routines.noRoutinesTitle', 'Keine Routinen')}</Text>
             <Text style={styles.emptyText}>
-              {canEdit ? 'Lege eine neue Routine an.' : 'Es sind noch keine Routinen vorhanden.'}
+              {canEdit
+                ? t('routines.emptyTextCanEdit', 'Lege eine neue Routine an.')
+                : t('routines.emptyText', 'Es sind noch keine Routinen vorhanden.')}
             </Text>
           </View>
         ) : (
@@ -825,18 +1072,18 @@ export default function RoutinesScreen() {
         <View style={styles.modalOverlay}>
           <Toast toast={toast} onDismiss={() => setToast(null)} />
           <View style={styles.modalSheet}>
-            <Text style={styles.modalTitle}>Neue Routine anlegen</Text>
+            <Text style={styles.modalTitle}>{t('routines.createModal.title', 'Neue Routine anlegen')}</Text>
 
-            <Text style={styles.fieldLabel}>Anzeigename (optional)</Text>
+            <Text style={styles.fieldLabel}>{t('routines.createModal.displayNameLabel', 'Anzeigename (optional)')}</Text>
             <TextInput
               style={[styles.dropdownBtn, { marginBottom: Spacing.md }]}
-              placeholder="z. B. Wettkampf Pflicht 2025"
+              placeholder={t('routines.createModal.displayNamePlaceholder', 'z. B. Wettkampf Pflicht 2025')}
               placeholderTextColor={Colors.textTertiary}
               value={createDisplayName}
               onChangeText={setCreateDisplayName}
             />
 
-            <Text style={styles.fieldLabel}>Serienspezifikation (optional)</Text>
+            <Text style={styles.fieldLabel}>{t('routines.createModal.specLabel', 'Serienspezifikation (optional)')}</Text>
             <SpecDropdown
               value={selectedSpecId}
               open={specDropdownOpen}
@@ -854,7 +1101,7 @@ export default function RoutinesScreen() {
                 onPress={() => setCreateModalVisible(false)}
                 activeOpacity={0.7}
               >
-                <Text style={styles.cancelBtnLabel}>Abbrechen</Text>
+                <Text style={styles.cancelBtnLabel}>{t('common.cancel', 'Abbrechen')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.saveBtn, isSaving && styles.saveBtnDisabled]}
@@ -862,7 +1109,9 @@ export default function RoutinesScreen() {
                 disabled={isSaving}
                 activeOpacity={0.8}
               >
-                <Text style={styles.saveBtnLabel}>{isSaving ? 'Anlegen…' : 'Anlegen'}</Text>
+                <Text style={styles.saveBtnLabel}>
+                  {isSaving ? t('routines.createModal.creating', 'Anlegen…') : t('routines.createModal.create', 'Anlegen')}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -880,19 +1129,22 @@ export default function RoutinesScreen() {
           <Toast toast={toast} onDismiss={() => setToast(null)} />
           <View style={styles.modalSheet}>
             <Text style={styles.modalTitle}>
-              Routine #{editingRoutine?.index} bearbeiten
+              {t('routines.editModal.title', {
+                index: editingRoutine?.index,
+                defaultValue: `Routine #${editingRoutine?.index} bearbeiten`,
+              })}
             </Text>
 
-            <Text style={styles.fieldLabel}>Anzeigename</Text>
+            <Text style={styles.fieldLabel}>{t('routines.editModal.displayNameLabel', 'Anzeigename')}</Text>
             <TextInput
               style={[styles.dropdownBtn, { marginBottom: Spacing.md }]}
-              placeholder="z. B. Wettkampf Pflicht 2025"
+              placeholder={t('routines.editModal.displayNamePlaceholder', 'z. B. Wettkampf Pflicht 2025')}
               placeholderTextColor={Colors.textTertiary}
               value={editDisplayName}
               onChangeText={setEditDisplayName}
             />
 
-            <Text style={styles.fieldLabel}>Serienspezifikation</Text>
+            <Text style={styles.fieldLabel}>{t('routines.editModal.specLabel', 'Serienspezifikation')}</Text>
             <SpecDropdown
               value={editSpecId}
               open={editDropdownOpen}
@@ -910,7 +1162,7 @@ export default function RoutinesScreen() {
                 onPress={() => setEditModalVisible(false)}
                 activeOpacity={0.7}
               >
-                <Text style={styles.cancelBtnLabel}>Abbrechen</Text>
+                <Text style={styles.cancelBtnLabel}>{t('common.cancel', 'Abbrechen')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.saveBtn, isSaving && styles.saveBtnDisabled]}
@@ -918,7 +1170,9 @@ export default function RoutinesScreen() {
                 disabled={isSaving}
                 activeOpacity={0.8}
               >
-                <Text style={styles.saveBtnLabel}>{isSaving ? 'Speichern…' : 'Speichern'}</Text>
+                <Text style={styles.saveBtnLabel}>
+                  {isSaving ? t('routines.editModal.saving', 'Speichern…') : t('routines.editModal.save', 'Speichern')}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -938,9 +1192,15 @@ export default function RoutinesScreen() {
             {/* Header */}
             <View style={styles.addDiveModalHeader}>
               <View>
-                <Text style={styles.modalTitle}>Sprung hinzufügen</Text>
+                <Text style={styles.modalTitle}>{t('routines.addDiveModal.title', 'Sprung hinzufügen')}</Text>
                 <Text style={styles.addDiveSub}>
-                  zu Routine #{targetRoutineForAdd?.index} {targetRoutineForAdd?.displayName ? `(${targetRoutineForAdd.displayName})` : ''}
+                  {t('routines.addDiveModal.subtitle', {
+                    index: targetRoutineForAdd?.index,
+                    name: targetRoutineForAdd?.displayName ? `(${targetRoutineForAdd.displayName})` : '',
+                    defaultValue: `zu Routine #${targetRoutineForAdd?.index} ${
+                      targetRoutineForAdd?.displayName ? `(${targetRoutineForAdd.displayName})` : ''
+                    }`,
+                  })}
                 </Text>
               </View>
               <TouchableOpacity
@@ -957,7 +1217,7 @@ export default function RoutinesScreen() {
               <Text style={styles.searchIcon}>🔍</Text>
               <TextInput
                 style={styles.diveSearchInput}
-                placeholder="Sprungcode oder Name suchen (z. B. 103B, Auerbach…)"
+                placeholder={t('routines.addDiveModal.searchPlaceholder', 'Sprungcode oder Name suchen (z. B. 103B, Auerbach…)')}
                 placeholderTextColor={Colors.textTertiary}
                 value={diveSearchQuery}
                 onChangeText={setDiveSearchQuery}
@@ -984,7 +1244,7 @@ export default function RoutinesScreen() {
                       activeOpacity={0.7}
                     >
                       <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
-                        {h === 'ALL' ? 'Alle Höhen' : h}
+                        {h === 'ALL' ? t('routines.addDiveModal.allHeights', 'Alle Höhen') : h}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -1001,12 +1261,12 @@ export default function RoutinesScreen() {
                   activeOpacity={0.7}
                 >
                   <Text style={[styles.filterChipText, selectedGroupFilter === null && styles.filterChipTextActive]}>
-                    Alle Gruppen
+                    {t('routines.addDiveModal.allGroups', 'Alle Gruppen')}
                   </Text>
                 </TouchableOpacity>
                 {[1, 2, 3, 4, 5, 6].map((grp) => {
                   const isActive = selectedGroupFilter === grp;
-                  const grpName = DIVE_GROUP_NAMES[grp]?.de ?? `Gr. ${grp}`;
+                  const grpName = getGroupName(grp);
                   return (
                     <TouchableOpacity
                       key={grp}
@@ -1023,15 +1283,51 @@ export default function RoutinesScreen() {
               </ScrollView>
             </View>
 
+            {/* Valide-Filter Toggle */}
+            <View style={styles.validFilterSection}>
+              <TouchableOpacity
+                style={[styles.validFilterChip, onlyValidFilter && styles.validFilterChipActive]}
+                onPress={() => setOnlyValidFilter((v) => !v)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.validFilterChipIcon, onlyValidFilter && styles.validFilterChipIconActive]}>
+                  {onlyValidFilter ? '✓' : '⚡'}
+                </Text>
+                <Text style={[styles.validFilterChipText, onlyValidFilter && styles.validFilterChipTextActive]}>
+                  {t('routines.addDiveModal.onlyValidFilter', 'Nur valide Sprünge')}
+                </Text>
+                <View style={[styles.validCountPill, onlyValidFilter && styles.validCountPillActive]}>
+                  <Text style={[styles.validCountPillText, onlyValidFilter && styles.validCountPillTextActive]}>
+                    {validCount} / {totalMatchingCount}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+
             {/* Trefferliste */}
             {isCatalogLoading ? (
               <View style={styles.modalLoadingContainer}>
                 <ActivityIndicator size="small" color={Colors.primary} />
-                <Text style={styles.emptyText}>Lade Sprungkatalog…</Text>
+                <Text style={styles.emptyText}>{t('routines.addDiveModal.loadingCatalog', 'Lade Sprungkatalog…')}</Text>
               </View>
             ) : filteredCatalogExecutions.length === 0 ? (
               <View style={styles.modalEmptyContainer}>
-                <Text style={styles.emptyText}>Keine passenden Sprünge gefunden.</Text>
+                <Text style={styles.emptyText}>
+                  {onlyValidFilter && totalMatchingCount > 0
+                    ? t('routines.addDiveModal.noValidDivesFound', 'Keine validen Sprünge für diese Filter gefunden. Deaktiviere „Nur valide Sprünge“, um alle zu sehen.')
+                    : t('routines.addDiveModal.noDivesFound', 'Keine passenden Sprünge gefunden.')}
+                </Text>
+                {onlyValidFilter && totalMatchingCount > 0 && (
+                  <TouchableOpacity
+                    style={styles.showAllDivesBtn}
+                    onPress={() => setOnlyValidFilter(false)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.showAllDivesBtnText}>
+                      {t('routines.addDiveModal.showAllBtn', 'Alle Sprünge anzeigen')}
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
             ) : (
               <FlatList
@@ -1041,35 +1337,98 @@ export default function RoutinesScreen() {
                 contentContainerStyle={styles.catalogListContent}
                 renderItem={({ item }) => {
                   const uiHeight = BACKEND_TO_HEIGHT[item.height] ?? item.height;
-                  const posName = POSITION_NAMES[item.execution] ?? item.execution;
+                  const posName = getPositionName(item.execution);
                   const isBeingAdded = isAddingDiveId === item.id;
+                  const diveTitle = (i18n.language === 'en' ? (item.nameEn || item.nameDe) : (item.nameDe || item.nameEn)) || item.diveCode;
+
+                  const validation = validateDiveForRoutine(targetRoutineForAdd, item);
+                  const isInvalid = !validation.isValid;
+                  const reasonBadge = validation.reasonKey
+                    ? t(`routines.validationBadges.${validation.reasonKey}`, validation.reasonKey)
+                    : null;
 
                   return (
                     <TouchableOpacity
-                      style={styles.catalogItemRow}
+                      style={[
+                        styles.catalogItemRow,
+                        isInvalid && styles.catalogItemRowDisabled,
+                      ]}
                       onPress={() => handleAddDive(item)}
-                      disabled={isBeingAdded}
+                      disabled={isBeingAdded || isInvalid}
                       activeOpacity={0.7}
                     >
-                      <View style={styles.catalogCodeBadge}>
-                        <Text style={styles.catalogCodeText}>{item.diveCode}{item.execution}</Text>
+                      <View
+                        style={[
+                          styles.catalogCodeBadge,
+                          isInvalid && styles.catalogCodeBadgeDisabled,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.catalogCodeText,
+                            isInvalid && styles.catalogCodeTextDisabled,
+                          ]}
+                        >
+                          {item.diveCode}{item.execution}
+                        </Text>
                       </View>
                       <View style={styles.catalogInfo}>
-                        <Text style={styles.catalogName} numberOfLines={1}>
-                          {item.nameDe || item.nameEn || item.diveCode}
+                        <Text
+                          style={[
+                            styles.catalogName,
+                            isInvalid && styles.catalogNameDisabled,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {diveTitle}
                         </Text>
                         <View style={styles.catalogMetaRow}>
                           <Text style={styles.catalogMetaBadge}>{uiHeight}</Text>
                           <Text style={styles.catalogMetaBadge}>{posName}</Text>
-                          <Text style={styles.catalogMetaBadge}>DD {item.degreeOfDifficulty.toFixed(1)}</Text>
-                          <Text style={styles.catalogMetaGroup}>
-                            {DIVE_GROUP_NAMES[item.groupNumber]?.de ?? `Gr. ${item.groupNumber}`}
+                          <Text style={styles.catalogMetaBadge}>
+                            {t('routines.difficultyBadge', {
+                              dd: item.degreeOfDifficulty.toFixed(1),
+                              defaultValue: `SKG ${item.degreeOfDifficulty.toFixed(1)}`,
+                            })}
                           </Text>
+                          <Text style={styles.catalogMetaGroup}>
+                            {getGroupName(item.groupNumber)}
+                          </Text>
+                          {isInvalid && reasonBadge && (
+                            <View
+                              style={[
+                                styles.invalidReasonTag,
+                                validation.reasonKey === 'ROUTINE_DUPLICATE_DIVE_NUMBER'
+                                  ? styles.invalidReasonTagDuplicate
+                                  : styles.invalidReasonTagConstraint,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.invalidReasonTagText,
+                                  validation.reasonKey === 'ROUTINE_DUPLICATE_DIVE_NUMBER'
+                                    ? styles.invalidReasonTagTextDuplicate
+                                    : styles.invalidReasonTagTextConstraint,
+                                ]}
+                              >
+                                {reasonBadge}
+                              </Text>
+                            </View>
+                          )}
                         </View>
                       </View>
-                      <View style={styles.catalogAddBtn}>
+                      <View
+                        style={[
+                          styles.catalogAddBtn,
+                          isInvalid && styles.catalogAddBtnDisabled,
+                        ]}
+                      >
                         {isBeingAdded ? (
                           <ActivityIndicator size="small" color={Colors.white} />
+                        ) : isInvalid ? (
+                          <Text style={styles.catalogAddBtnTextDisabled}>
+                            {validation.reasonKey === 'ROUTINE_DUPLICATE_DIVE_NUMBER' ? '✓' : '✕'}
+                          </Text>
                         ) : (
                           <Text style={styles.catalogAddBtnText}>＋</Text>
                         )}
@@ -1095,9 +1454,15 @@ export default function RoutinesScreen() {
           <View style={[styles.modalSheet, styles.sortModalSheet]}>
             <View style={styles.sortModalHeader}>
               <View>
-                <Text style={styles.modalTitle}>Sprünge sortieren</Text>
+                <Text style={styles.modalTitle}>{t('routines.sortModal.title', 'Sprünge sortieren')}</Text>
                 <Text style={styles.sortModalSub}>
-                  Routine #{sortModalRoutine?.index} {sortModalRoutine?.displayName ? `(${sortModalRoutine.displayName})` : ''}
+                  {t('routines.sortModal.subtitle', {
+                    index: sortModalRoutine?.index,
+                    name: sortModalRoutine?.displayName ? `(${sortModalRoutine.displayName})` : '',
+                    defaultValue: `Routine #${sortModalRoutine?.index} ${
+                      sortModalRoutine?.displayName ? `(${sortModalRoutine.displayName})` : ''
+                    }`,
+                  })}
                 </Text>
               </View>
               <TouchableOpacity
@@ -1109,7 +1474,7 @@ export default function RoutinesScreen() {
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.sortSectionLabel}>Schnell-Sortierung</Text>
+            <Text style={styles.sortSectionLabel}>{t('routines.sortModal.quickSort', 'Schnell-Sortierung')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.presetScroll}>
               <View style={styles.presetRow}>
                 <TouchableOpacity
@@ -1117,38 +1482,48 @@ export default function RoutinesScreen() {
                   onPress={() => handlePresetSort('group')}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.presetChipText}>🏷️ Nach Gruppe</Text>
+                  <Text style={styles.presetChipText}>{t('routines.sortModal.presetGroup', '🏷️ Nach Gruppe')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.presetChip}
                   onPress={() => handlePresetSort('ddAsc')}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.presetChipText}>📈 DD aufsteigend</Text>
+                  <Text style={styles.presetChipText}>{t('routines.sortModal.presetDdAsc', '📈 SKG aufsteigend')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.presetChip}
                   onPress={() => handlePresetSort('ddDesc')}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.presetChipText}>📉 DD absteigend</Text>
+                  <Text style={styles.presetChipText}>{t('routines.sortModal.presetDdDesc', '📉 SKG absteigend')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.presetChip}
                   onPress={() => handlePresetSort('code')}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.presetChipText}>🔢 Nach Nummer</Text>
+                  <Text style={styles.presetChipText}>{t('routines.sortModal.presetCode', '🔢 Nach Nummer')}</Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>
 
-            <Text style={styles.sortSectionLabel}>Reihenfolge anpassen ({sortModalDives.length} Sprünge)</Text>
+            <Text style={styles.sortSectionLabel}>
+              {t('routines.sortModal.customOrder', {
+                count: sortModalDives.length,
+                defaultValue: `Reihenfolge anpassen (${sortModalDives.length} Sprünge)`,
+              })}
+            </Text>
             <ScrollView style={styles.sortModalList} showsVerticalScrollIndicator={true}>
               {sortModalDives.map((de, idx) => {
                 const heightText = BACKEND_TO_HEIGHT[de.height] ?? de.height;
-                const posLabel = POSITION_NAMES[de.execution] ?? de.execution;
-                const groupName = DIVE_GROUP_NAMES[de.groupNumber]?.de ?? `Gr. ${de.groupNumber}`;
+                const posLabel = getPositionName(de.execution);
+                const groupName = getGroupName(de.groupNumber);
+                const diveTitle = (i18n.language === 'en' ? (de.nameEn || de.nameDe) : (de.nameDe || de.nameEn)) || de.diveCode;
+                const ddBadge = t('routines.difficultyBadge', {
+                  dd: de.degreeOfDifficulty.toFixed(1),
+                  defaultValue: `SKG ${de.degreeOfDifficulty.toFixed(1)}`,
+                });
                 const isFirst = idx === 0;
                 const isLast = idx === sortModalDives.length - 1;
 
@@ -1162,10 +1537,10 @@ export default function RoutinesScreen() {
                     </View>
                     <View style={styles.sortModalItemInfo}>
                       <Text style={styles.sortModalItemName} numberOfLines={1}>
-                        {de.nameDe || de.nameEn || de.diveCode}
+                        {diveTitle}
                       </Text>
                       <Text style={styles.sortModalItemMeta}>
-                        {heightText} · {posLabel} · DD {de.degreeOfDifficulty.toFixed(1)} · {groupName}
+                        {heightText} · {posLabel} · {ddBadge} · {groupName}
                       </Text>
                     </View>
                     <View style={styles.sortModalItemActions}>
@@ -1198,7 +1573,7 @@ export default function RoutinesScreen() {
                 disabled={isSavingOrder}
                 activeOpacity={0.7}
               >
-                <Text style={styles.cancelBtnLabel}>Abbrechen</Text>
+                <Text style={styles.cancelBtnLabel}>{t('common.cancel', 'Abbrechen')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.saveBtn, isSavingOrder && styles.saveBtnDisabled]}
@@ -1209,7 +1584,7 @@ export default function RoutinesScreen() {
                 {isSavingOrder ? (
                   <ActivityIndicator size="small" color={Colors.white} />
                 ) : (
-                  <Text style={styles.saveBtnLabel}>Reihenfolge speichern</Text>
+                  <Text style={styles.saveBtnLabel}>{t('routines.sortModal.saveOrder', 'Reihenfolge speichern')}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -1220,14 +1595,20 @@ export default function RoutinesScreen() {
       {/* ── Confirm Delete Routine Modal ── */}
       <ConfirmModal
         visible={!!routineToDelete}
-        title="Routine löschen"
+        title={t('routines.deleteModal.title', 'Routine löschen')}
         message={
           routineToDelete
-            ? `Möchtest du Routine #${routineToDelete.index}${routineToDelete.displayName ? ` (${routineToDelete.displayName})` : ''} wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`
+            ? t('routines.deleteModal.message', {
+                index: routineToDelete.index,
+                name: routineToDelete.displayName ? ` (${routineToDelete.displayName})` : '',
+                defaultValue: `Möchtest du Routine #${routineToDelete.index}${
+                  routineToDelete.displayName ? ` (${routineToDelete.displayName})` : ''
+                } wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`,
+              })
             : ''
         }
-        confirmText="Löschen"
-        cancelText="Abbrechen"
+        confirmText={t('common.delete', 'Löschen')}
+        cancelText={t('common.cancel', 'Abbrechen')}
         variant="danger"
         isLoading={isDeletingRoutine}
         onConfirm={confirmDeleteRoutine}
@@ -1237,14 +1618,18 @@ export default function RoutinesScreen() {
       {/* ── Confirm Remove Dive Modal ── */}
       <ConfirmModal
         visible={!!diveToRemove}
-        title="Sprung entfernen"
+        title={t('routines.removeDiveModal.title', 'Sprung entfernen')}
         message={
           diveToRemove
-            ? `Möchtest du „${diveToRemove.diveName}“ wirklich aus Routine #${diveToRemove.routine.index} entfernen?`
+            ? t('routines.removeDiveModal.message', {
+                diveName: diveToRemove.diveName,
+                index: diveToRemove.routine.index,
+                defaultValue: `Möchtest du „${diveToRemove.diveName}“ wirklich aus Routine #${diveToRemove.routine.index} entfernen?`,
+              })
             : ''
         }
-        confirmText="Entfernen"
-        cancelText="Abbrechen"
+        confirmText={t('routines.removeDiveModal.confirmBtn', 'Entfernen')}
+        cancelText={t('common.cancel', 'Abbrechen')}
         variant="danger"
         isLoading={isRemovingDive}
         onConfirm={confirmRemoveDive}
@@ -1856,6 +2241,119 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: Colors.textTertiary,
   },
+  catalogItemRowDisabled: {
+    opacity: 0.58,
+  },
+  catalogCodeBadgeDisabled: {
+    backgroundColor: Colors.borderLight,
+  },
+  catalogCodeTextDisabled: {
+    color: Colors.textTertiary,
+  },
+  catalogNameDisabled: {
+    color: Colors.textSecondary,
+  },
+
+  // Valid Filter Toggle Bar
+  validFilterSection: {
+    paddingVertical: Spacing.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.xs,
+  },
+  validFilterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.background,
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    gap: Spacing.xs,
+  },
+  validFilterChipActive: {
+    backgroundColor: Colors.successBg,
+    borderColor: Colors.success,
+  },
+  validFilterChipIcon: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    fontWeight: FontWeight.bold,
+  },
+  validFilterChipIconActive: {
+    color: Colors.success,
+  },
+  validFilterChipText: {
+    fontSize: FontSize.xs,
+    color: Colors.textSecondary,
+    fontWeight: FontWeight.medium,
+  },
+  validFilterChipTextActive: {
+    color: Colors.success,
+    fontWeight: FontWeight.bold,
+  },
+  validCountPill: {
+    backgroundColor: Colors.surface,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  validCountPillActive: {
+    backgroundColor: Colors.white,
+    borderColor: Colors.success,
+  },
+  validCountPillText: {
+    fontSize: 10,
+    color: Colors.textTertiary,
+    fontWeight: FontWeight.semiBold,
+  },
+  validCountPillTextActive: {
+    color: Colors.success,
+    fontWeight: FontWeight.bold,
+  },
+
+  // Reason Badges on Catalog Items
+  invalidReasonTag: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: BorderRadius.xs,
+    borderWidth: 1,
+  },
+  invalidReasonTagDuplicate: {
+    backgroundColor: Colors.warningBg,
+    borderColor: Colors.warning,
+  },
+  invalidReasonTagConstraint: {
+    backgroundColor: Colors.errorBg,
+    borderColor: Colors.error,
+  },
+  invalidReasonTagText: {
+    fontSize: 10,
+    fontWeight: FontWeight.semiBold,
+  },
+  invalidReasonTagTextDuplicate: {
+    color: Colors.warning,
+  },
+  invalidReasonTagTextConstraint: {
+    color: Colors.error,
+  },
+
+  showAllDivesBtn: {
+    marginTop: Spacing.md,
+    backgroundColor: Colors.primarySurface,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.full,
+  },
+  showAllDivesBtnText: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.semiBold,
+    color: Colors.primary,
+  },
+
   catalogAddBtn: {
     width: 36,
     height: 36,
@@ -1866,9 +2364,19 @@ const styles = StyleSheet.create({
     marginLeft: Spacing.sm,
     ...Shadows.sm,
   },
+  catalogAddBtnDisabled: {
+    backgroundColor: Colors.border,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
   catalogAddBtnText: {
     color: Colors.white,
     fontSize: 18,
+    fontWeight: FontWeight.bold,
+  },
+  catalogAddBtnTextDisabled: {
+    color: Colors.textTertiary,
+    fontSize: 14,
     fontWeight: FontWeight.bold,
   },
 

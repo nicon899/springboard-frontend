@@ -27,7 +27,9 @@
     "trainer": "Trainer Dashboard",
     "trainingStatus": "Training Status",
     "club": "Club",
-    "profile": "Profile"
+    "routineSpecifications": "Routine Specifications",
+    "routines": "Routines",
+    "ageCategories": "Age Categories"
   },
   "auth": {
     "login": "Sign In",
@@ -105,7 +107,10 @@
     "addDiveTitle": "Add Dive",
     "selectDive": "Select dive from catalog",
     "noCatalogDives": "No more dives available in catalog for this height.",
-    "addToTrainer": "Add to training plan"
+    "addToTrainer": "Add to training plan",
+    "routinesBannerTitle": "Routines (Series)",
+    "routinesBannerSub": "{{count}} routine available",
+    "routinesBannerSub_other": "{{count}} routines available"
   },
   "diveSearch": {
     "title": "Dive Search",
@@ -172,8 +177,171 @@
       "ROLE_USER": "User"
     }
   },
+  "routineSpecifications": {
+    "title": "Routine Specifications",
+    "specCount": "{{count}} specification",
+    "specCount_other": "{{count}} specifications",
+    "newButton": "+ New",
+    "loading": "Loading specifications...",
+    "emptyTitle": "No specifications",
+    "emptyTextCanEdit": "Create a new routine specification.",
+    "emptyText": "No routine specifications available yet.",
+    "defaultSpecName": "Specification #{{id}}",
+    "beginner": "Beginner",
+    "juniorTable": "Junior Table",
+    "dives": "Dives",
+    "groups": "Groups",
+    "maxDifficulty": "Max. DD",
+    "gender": "Gender",
+    "ageCategory": "Age Category",
+    "genderAll": "All",
+    "genderMale": "Male",
+    "genderFemale": "Female",
+    "genderDiverse": "Other",
+    "createTitle": "New Routine Specification",
+    "editTitle": "Edit Specification",
+    "nameLabel": "Name",
+    "namePlaceholder": "e.g. Compulsory 2025 U14",
+    "numberOfDivesLabel": "Number of Dives",
+    "numberOfDivesPlaceholder": "e.g. 5",
+    "numberOfGroupsLabel": "Number of Groups",
+    "numberOfGroupsPlaceholder": "e.g. 3",
+    "maxDifficultyScoreLabel": "Max. Degree of Difficulty (DD)",
+    "maxDifficultyScorePlaceholder": "e.g. 7.5",
+    "ageCategoryLabel": "Age Category",
+    "selectAgeCategoryPlaceholder": "Select age category...",
+    "noAgeCategory": "No age category",
+    "birthYears": "YOB {{from}} – {{to}}",
+    "createAgeCategoryLink": "＋ Create new age category",
+    "genderLabel": "Gender",
+    "juniorTableAllowed": "Junior table allowed",
+    "saving": "Saving...",
+    "saveFailed": "Failed to save",
+    "deleteFailed": "Failed to delete",
+    "deleteModal": {
+      "title": "Delete Routine Specification",
+      "message": "Do you really want to delete routine specification \"{{name}}\"? This action cannot be undone."
+    }
+  },
   "routines": {
+    "title": "Routines",
+    "routineCount": "{{count}} routine",
+    "routineCount_other": "{{count}} routines",
+    "newRoutineBtn": "+ New Routine",
+    "loading": "Loading routines...",
+    "emptyTitle": "No routines",
+    "emptyTextCanEdit": "Create a new routine.",
+    "emptyText": "No routines available yet.",
+    "defaultRoutineTitle": "Routine #{{index}}",
+    "diveCount": "{{count}} dive",
+    "diveCount_other": "{{count}} dives",
+    "maxDivesAllowed": "max. {{max}} allowed",
+    "maxDivesUnlimited": "max. ∞ allowed",
+    "tags": {
+      "dives": "Dives",
+      "groups": "Groups",
+      "maxDifficulty": "Max. DD",
+      "ageCategory": "Age Category",
+      "gender": "Gender",
+      "beginner": "Beginner",
+      "juniorTable": "Junior Table"
+    },
+    "stats": {
+      "totalDifficulty": "Total DD",
+      "groups": "Groups",
+      "minGroups": " / min. {{min}}",
+      "diveCount": "Dive Count"
+    },
+    "difficultyBadge": "DD {{dd}}",
+    "divesSectionTitle": "Dives in this routine",
+    "sortBtn": "⇅ Sort",
+    "addDiveBtn": "+ Add Dive",
+    "noDivesText": "No dives in this routine yet.",
+    "addFirstDiveBtn": "+ Add first dive",
+    "positions": {
+      "A": "Straight",
+      "B": "Pike",
+      "C": "Tuck",
+      "D": "Free"
+    },
+    "genderAll": "All",
+    "genderMale": "Male",
+    "genderFemale": "Female",
+    "genderDiverse": "Other",
+    "dropdown": {
+      "selectSpec": "Select specification...",
+      "noSpec": "No specification",
+      "maxDifficultyShort": "DD max. {{max}}",
+      "createSpecLink": "＋ Create new specification"
+    },
+    "toasts": {
+      "createSuccess": "Routine successfully created",
+      "updateSuccess": "Routine updated",
+      "deleteSuccess": "Routine #{{index}} deleted",
+      "addDiveSuccess": "Dive {{dive}} added",
+      "removeDiveSuccess": "Dive removed",
+      "reorderSuccess": "Order successfully saved"
+    },
+    "createModal": {
+      "title": "Create New Routine",
+      "displayNameLabel": "Display Name (optional)",
+      "displayNamePlaceholder": "e.g. Competition Compulsory 2025",
+      "specLabel": "Routine Specification (optional)",
+      "create": "Create",
+      "creating": "Creating..."
+    },
+    "editModal": {
+      "title": "Edit Routine #{{index}}",
+      "displayNameLabel": "Display Name",
+      "displayNamePlaceholder": "e.g. Competition Compulsory 2025",
+      "specLabel": "Routine Specification",
+      "save": "Save",
+      "saving": "Saving..."
+    },
+    "addDiveModal": {
+      "title": "Add Dive",
+      "subtitle": "to Routine #{{index}} {{name}}",
+      "searchPlaceholder": "Search dive code or name (e.g. 103B, Reverse...)",
+      "allHeights": "All Heights",
+      "allGroups": "All Groups",
+      "onlyValidFilter": "Only valid dives",
+      "onlyValidFilterCount": "Only valid dives ({{valid}}/{{total}})",
+      "loadingCatalog": "Loading dive catalog...",
+      "noDivesFound": "No matching dives found.",
+      "noValidDivesFound": "No valid dives found for these filters. Turn off \"Only valid dives\" to view all.",
+      "showAllBtn": "Show all dives",
+      "alreadyInRoutine": "In Routine"
+    },
+    "validationBadges": {
+      "ROUTINE_DUPLICATE_DIVE_NUMBER": "In Routine",
+      "ROUTINE_MAX_DIVES_EXCEEDED": "Max dives",
+      "ROUTINE_JUNIOR_TABLE_NOT_ALLOWED": "Junior table",
+      "ROUTINE_MAX_DIFFICULTY_EXCEEDED": "DD too high",
+      "ROUTINE_MIN_GROUPS_NOT_REACHABLE": "Groups missing"
+    },
+    "sortModal": {
+      "title": "Sort Dives",
+      "subtitle": "Routine #{{index}} {{name}}",
+      "quickSort": "Quick Sort",
+      "presetGroup": "🏷️ By Group",
+      "presetDdAsc": "📈 DD Ascending",
+      "presetDdDesc": "📉 DD Descending",
+      "presetCode": "🔢 By Number",
+      "customOrder": "Adjust order ({{count}} dives)",
+      "customOrder_one": "Adjust order ({{count}} dive)",
+      "saveOrder": "Save Order"
+    },
+    "deleteModal": {
+      "title": "Delete Routine",
+      "message": "Do you really want to delete Routine #{{index}}{{name}}? This action cannot be undone."
+    },
+    "removeDiveModal": {
+      "title": "Remove Dive",
+      "message": "Do you really want to remove \"{{diveName}}\" from Routine #{{index}}?",
+      "confirmBtn": "Remove"
+    },
     "errors": {
+      "ROUTINE_DUPLICATE_DIVE_NUMBER": "Dive number {{diveCode}} is already included in this routine (each dive number can only appear once).",
       "ROUTINE_MAX_DIVES_EXCEEDED": "The maximum number of {{numberOfDives}} dives for this routine has already been reached.",
       "ROUTINE_JUNIOR_TABLE_NOT_ALLOWED": "Dive {{diveCode}} is from the junior table and not allowed for this routine.",
       "ROUTINE_MAX_DIFFICULTY_EXCEEDED": "Maximum degree of difficulty of {{maxDifficulty}} would be exceeded (current: {{currentDifficulty}}, new: {{newDifficulty}}).",

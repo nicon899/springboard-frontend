@@ -27,7 +27,9 @@
     "trainer": "Trainer-Dashboard",
     "trainingStatus": "Trainingsstand",
     "club": "Verein",
-    "profile": "Profil"
+    "routineSpecifications": "Serienspezifikationen",
+    "routines": "Routinen",
+    "ageCategories": "Altersklassen"
   },
   "auth": {
     "login": "Anmelden",
@@ -105,7 +107,10 @@
     "addDiveTitle": "Sprung hinzufügen",
     "selectDive": "Sprung aus Katalog wählen",
     "noCatalogDives": "Keine weiteren Sprünge für diese Höhe im Katalog.",
-    "addToTrainer": "Zum Trainingsplan hinzufügen"
+    "addToTrainer": "Zum Trainingsplan hinzufügen",
+    "routinesBannerTitle": "Routinen (Serien)",
+    "routinesBannerSub": "{{count}} Routine vorhanden",
+    "routinesBannerSub_other": "{{count}} Routinen vorhanden"
   },
   "diveSearch": {
     "title": "Sprungsuche",
@@ -114,7 +119,7 @@
     "waitingForInput": "Warte auf gültige Eingabe...",
     "noResults": "Kein Sprung gefunden.",
     "multipleResults": "Mehrere Treffer – bitte genauer eingeben.",
-    "difficultyMatrix": "Schwierigkeitsgrad-Matrix (DD)",
+    "difficultyMatrix": "Schwierigkeitsgrad-Matrix (SKG)",
     "position": "Position",
     "group": "Gruppe",
     "positionA": "A – Gestreckt",
@@ -172,8 +177,171 @@
       "ROLE_USER": "Nutzer"
     }
   },
+  "routineSpecifications": {
+    "title": "Serienspezifikationen",
+    "specCount": "{{count}} Spezifikation",
+    "specCount_other": "{{count}} Spezifikationen",
+    "newButton": "+ Neu",
+    "loading": "Lade Spezifikationen…",
+    "emptyTitle": "Keine Spezifikationen",
+    "emptyTextCanEdit": "Lege eine neue Serienspezifikation an.",
+    "emptyText": "Es sind noch keine Spezifikationen vorhanden.",
+    "defaultSpecName": "Spezifikation #{{id}}",
+    "beginner": "Anfänger",
+    "juniorTable": "Juniortabelle",
+    "dives": "Sprünge",
+    "groups": "Gruppen",
+    "maxDifficulty": "Max. SKG",
+    "gender": "Geschlecht",
+    "ageCategory": "Altersklasse",
+    "genderAll": "Alle",
+    "genderMale": "Männlich",
+    "genderFemale": "Weiblich",
+    "genderDiverse": "Divers",
+    "createTitle": "Neue Serienspezifikation",
+    "editTitle": "Spezifikation bearbeiten",
+    "nameLabel": "Name",
+    "namePlaceholder": "z. B. Pflicht 2025 U14",
+    "numberOfDivesLabel": "Anzahl Sprünge",
+    "numberOfDivesPlaceholder": "z. B. 5",
+    "numberOfGroupsLabel": "Anzahl Gruppen",
+    "numberOfGroupsPlaceholder": "z. B. 3",
+    "maxDifficultyScoreLabel": "Max. Schwierigkeitsgrad (SKG)",
+    "maxDifficultyScorePlaceholder": "z. B. 7.5",
+    "ageCategoryLabel": "Altersklasse",
+    "selectAgeCategoryPlaceholder": "Altersklasse wählen…",
+    "noAgeCategory": "Keine Altersklasse",
+    "birthYears": "Jg. {{from}} – {{to}}",
+    "createAgeCategoryLink": "＋ Neue Altersklasse anlegen",
+    "genderLabel": "Geschlecht",
+    "juniorTableAllowed": "Juniortabelle erlaubt",
+    "saving": "Speichern…",
+    "saveFailed": "Speichern fehlgeschlagen",
+    "deleteFailed": "Löschen fehlgeschlagen",
+    "deleteModal": {
+      "title": "Serienspezifikation löschen",
+      "message": "Möchtest du die Serienspezifikation „{{name}}“ wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden."
+    }
+  },
   "routines": {
+    "title": "Routinen",
+    "routineCount": "{{count}} Routine",
+    "routineCount_other": "{{count}} Routinen",
+    "newRoutineBtn": "+ Neue Routine",
+    "loading": "Lade Routinen…",
+    "emptyTitle": "Keine Routinen",
+    "emptyTextCanEdit": "Lege eine neue Routine an.",
+    "emptyText": "Es sind noch keine Routinen vorhanden.",
+    "defaultRoutineTitle": "Routine #{{index}}",
+    "diveCount": "{{count}} Sprung",
+    "diveCount_other": "{{count}} Sprünge",
+    "maxDivesAllowed": "max. {{max}} erlaubt",
+    "maxDivesUnlimited": "max. ∞ erlaubt",
+    "tags": {
+      "dives": "Sprünge",
+      "groups": "Gruppen",
+      "maxDifficulty": "Max. SKG",
+      "ageCategory": "Altersklasse",
+      "gender": "Geschlecht",
+      "beginner": "Anfänger",
+      "juniorTable": "Juniortabelle"
+    },
+    "stats": {
+      "totalDifficulty": "Gesamt-SKG",
+      "groups": "Gruppen",
+      "minGroups": " / min. {{min}}",
+      "diveCount": "Sprung-Anzahl"
+    },
+    "difficultyBadge": "SKG {{dd}}",
+    "divesSectionTitle": "Sprünge in dieser Routine",
+    "sortBtn": "⇅ Sortieren",
+    "addDiveBtn": "+ Sprung hinzufügen",
+    "noDivesText": "Noch keine Sprünge in dieser Routine.",
+    "addFirstDiveBtn": "+ Ersten Sprung hinzufügen",
+    "positions": {
+      "A": "Gestreckt",
+      "B": "Gehechtet",
+      "C": "Gehockt",
+      "D": "Frei"
+    },
+    "genderAll": "Alle",
+    "genderMale": "Männlich",
+    "genderFemale": "Weiblich",
+    "genderDiverse": "Divers",
+    "dropdown": {
+      "selectSpec": "Spezifikation wählen…",
+      "noSpec": "Keine Spezifikation",
+      "maxDifficultyShort": "SKG max. {{max}}",
+      "createSpecLink": "＋ Neue Spezifikation anlegen"
+    },
+    "toasts": {
+      "createSuccess": "Routine erfolgreich angelegt",
+      "updateSuccess": "Routine aktualisiert",
+      "deleteSuccess": "Routine #{{index}} gelöscht",
+      "addDiveSuccess": "Sprung {{dive}} hinzugefügt",
+      "removeDiveSuccess": "Sprung entfernt",
+      "reorderSuccess": "Reihenfolge erfolgreich gespeichert"
+    },
+    "createModal": {
+      "title": "Neue Routine anlegen",
+      "displayNameLabel": "Anzeigename (optional)",
+      "displayNamePlaceholder": "z. B. Wettkampf Pflicht 2025",
+      "specLabel": "Serienspezifikation (optional)",
+      "create": "Anlegen",
+      "creating": "Anlegen…"
+    },
+    "editModal": {
+      "title": "Routine #{{index}} bearbeiten",
+      "displayNameLabel": "Anzeigename",
+      "displayNamePlaceholder": "z. B. Wettkampf Pflicht 2025",
+      "specLabel": "Serienspezifikation",
+      "save": "Speichern",
+      "saving": "Speichern…"
+    },
+    "addDiveModal": {
+      "title": "Sprung hinzufügen",
+      "subtitle": "zu Routine #{{index}} {{name}}",
+      "searchPlaceholder": "Sprungcode oder Name suchen (z. B. 103B, Auerbach…)",
+      "allHeights": "Alle Höhen",
+      "allGroups": "Alle Gruppen",
+      "onlyValidFilter": "Nur valide Sprünge",
+      "onlyValidFilterCount": "Nur valide Sprünge ({{valid}}/{{total}})",
+      "loadingCatalog": "Lade Sprungkatalog…",
+      "noDivesFound": "Keine passenden Sprünge gefunden.",
+      "noValidDivesFound": "Keine validen Sprünge für diese Filter gefunden. Deaktiviere „Nur valide Sprünge“, um alle zu sehen.",
+      "showAllBtn": "Alle Sprünge anzeigen",
+      "alreadyInRoutine": "Bereits in Routine"
+    },
+    "validationBadges": {
+      "ROUTINE_DUPLICATE_DIVE_NUMBER": "In Routine",
+      "ROUTINE_MAX_DIVES_EXCEEDED": "Max. Sprünge",
+      "ROUTINE_JUNIOR_TABLE_NOT_ALLOWED": "Nachwuchstabelle",
+      "ROUTINE_MAX_DIFFICULTY_EXCEEDED": "SKG zu hoch",
+      "ROUTINE_MIN_GROUPS_NOT_REACHABLE": "Gruppen fehlen"
+    },
+    "sortModal": {
+      "title": "Sprünge sortieren",
+      "subtitle": "Routine #{{index}} {{name}}",
+      "quickSort": "Schnell-Sortierung",
+      "presetGroup": "🏷️ Nach Gruppe",
+      "presetDdAsc": "📈 SKG aufsteigend",
+      "presetDdDesc": "📉 SKG absteigend",
+      "presetCode": "🔢 Nach Nummer",
+      "customOrder": "Reihenfolge anpassen ({{count}} Sprünge)",
+      "customOrder_one": "Reihenfolge anpassen ({{count}} Sprung)",
+      "saveOrder": "Reihenfolge speichern"
+    },
+    "deleteModal": {
+      "title": "Routine löschen",
+      "message": "Möchtest du Routine #{{index}}{{name}} wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden."
+    },
+    "removeDiveModal": {
+      "title": "Sprung entfernen",
+      "message": "Möchtest du „{{diveName}}“ wirklich aus Routine #{{index}} entfernen?",
+      "confirmBtn": "Entfernen"
+    },
     "errors": {
+      "ROUTINE_DUPLICATE_DIVE_NUMBER": "Sprungnummer {{diveCode}} ist bereits in dieser Routine vorhanden (jede Sprungnummer darf nur einmal vorkommen).",
       "ROUTINE_MAX_DIVES_EXCEEDED": "Die maximale Anzahl von {{numberOfDives}} Sprüngen für diese Serie ist bereits erreicht.",
       "ROUTINE_JUNIOR_TABLE_NOT_ALLOWED": "Sprung {{diveCode}} ist aus der Nachwuchstabelle und für diese Serie nicht erlaubt.",
       "ROUTINE_MAX_DIFFICULTY_EXCEEDED": "Maximaler Schwierigkeitsgrad von {{maxDifficulty}} würde überschritten (aktuell: {{currentDifficulty}}, neu: {{newDifficulty}}).",

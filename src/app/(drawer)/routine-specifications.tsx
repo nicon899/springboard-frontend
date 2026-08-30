@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import {
   BorderRadius,
@@ -31,13 +32,6 @@ import ConfirmModal from '../../components/modals/ConfirmModal';
 // ────────────────────────────────────────────────────────────
 // Konstanten
 // ────────────────────────────────────────────────────────────
-
-const GENDER_LABELS: Record<string, string> = {
-  ALL: 'Alle',
-  MALE: 'Männlich',
-  FEMALE: 'Weiblich',
-  DIVERSE: 'Divers',
-};
 
 const GENDER_OPTIONS: Array<'ALL' | 'MALE' | 'FEMALE' | 'DIVERSE'> = [
   'ALL',
@@ -90,6 +84,7 @@ function specToForm(spec: RoutineSpecificationResponse): SpecFormData {
 // ────────────────────────────────────────────────────────────
 
 export default function RoutineSpecificationsScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { activeClubId, activeClubMembership, isTrainerOrAdmin } = useAuth();
 
@@ -109,6 +104,21 @@ export default function RoutineSpecificationsScreen() {
   // Delete modal state
   const [specToDelete, setSpecToDelete] = useState<RoutineSpecificationResponse | null>(null);
   const [isDeletingSpec, setIsDeletingSpec] = useState(false);
+
+  const getGenderLabel = (g: string) => {
+    switch (g) {
+      case 'ALL':
+        return t('routineSpecifications.genderAll', 'Alle');
+      case 'MALE':
+        return t('routineSpecifications.genderMale', 'Männlich');
+      case 'FEMALE':
+        return t('routineSpecifications.genderFemale', 'Weiblich');
+      case 'DIVERSE':
+        return t('routineSpecifications.genderDiverse', 'Divers');
+      default:
+        return g;
+    }
+  };
 
   // ── Daten laden ──
   const loadData = useCallback(async () => {
@@ -182,7 +192,7 @@ export default function RoutineSpecificationsScreen() {
       setModalVisible(false);
       await loadData();
     } catch (e: any) {
-      Alert.alert('Fehler', e?.message || 'Speichern fehlgeschlagen');
+      Alert.alert(t('common.error', 'Fehler'), e?.message || t('routineSpecifications.saveFailed', 'Speichern fehlgeschlagen'));
     } finally {
       setIsSaving(false);
     }
@@ -201,7 +211,7 @@ export default function RoutineSpecificationsScreen() {
       setSpecToDelete(null);
       await loadData();
     } catch (e: any) {
-      Alert.alert('Fehler', e?.message || 'Löschen fehlgeschlagen');
+      Alert.alert(t('common.error', 'Fehler'), e?.message || t('routineSpecifications.deleteFailed', 'Löschen fehlgeschlagen'));
     } finally {
       setIsDeletingSpec(false);
     }
@@ -212,10 +222,12 @@ export default function RoutineSpecificationsScreen() {
     <View key={spec.id} style={styles.specCard}>
       <View style={styles.specHeader}>
         <View style={styles.specTitleRow}>
-          <Text style={styles.specName}>{spec.name || `Spezifikation #${spec.id}`}</Text>
+          <Text style={styles.specName}>
+            {spec.name || t('routineSpecifications.defaultSpecName', { id: spec.id, defaultValue: `Spezifikation #${spec.id}` })}
+          </Text>
           {spec.beginner && (
             <View style={styles.beginnerBadge}>
-              <Text style={styles.beginnerBadgeText}>Anfänger</Text>
+              <Text style={styles.beginnerBadgeText}>{t('routineSpecifications.beginner', 'Anfänger')}</Text>
             </View>
           )}
         </View>
@@ -241,23 +253,23 @@ export default function RoutineSpecificationsScreen() {
 
       <View style={styles.specMeta}>
         {spec.numberOfDives != null && (
-          <MetaChip label="Sprünge" value={String(spec.numberOfDives)} />
+          <MetaChip label={t('routineSpecifications.dives', 'Sprünge')} value={String(spec.numberOfDives)} />
         )}
         {spec.numberOfGroups != null && (
-          <MetaChip label="Gruppen" value={String(spec.numberOfGroups)} />
+          <MetaChip label={t('routineSpecifications.groups', 'Gruppen')} value={String(spec.numberOfGroups)} />
         )}
         {spec.maxDifficultyScore != null && (
-          <MetaChip label="Max. DD" value={spec.maxDifficultyScore.toFixed(1)} />
+          <MetaChip label={t('routineSpecifications.maxDifficulty', 'Max. SKG')} value={spec.maxDifficultyScore.toFixed(1)} />
         )}
         {spec.gender && spec.gender !== 'ALL' && (
-          <MetaChip label="Geschlecht" value={GENDER_LABELS[spec.gender] ?? spec.gender} />
+          <MetaChip label={t('routineSpecifications.gender', 'Geschlecht')} value={getGenderLabel(spec.gender)} />
         )}
         {spec.ageCategory && (
-          <MetaChip label="Altersklasse" value={spec.ageCategory.name} highlight />
+          <MetaChip label={t('routineSpecifications.ageCategory', 'Altersklasse')} value={spec.ageCategory.name} highlight />
         )}
         {spec.juniorTableAllowed && (
           <View style={[styles.metaChip, styles.metaChipHighlight]}>
-            <Text style={styles.metaChipHighlightText}>Juniortabelle</Text>
+            <Text style={styles.metaChipHighlightText}>{t('routineSpecifications.juniorTable', 'Juniortabelle')}</Text>
           </View>
         )}
       </View>
@@ -272,7 +284,7 @@ export default function RoutineSpecificationsScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         {/* Club-Banner */}
         <View style={styles.clubBanner}>
-          <Text style={styles.clubBannerLabel}>Verein</Text>
+          <Text style={styles.clubBannerLabel}>{t('club.title', 'Verein')}</Text>
           <Text style={styles.clubBannerName}>
             {activeClubMembership?.clubName ?? `Club #${clubId}`}
           </Text>
@@ -281,27 +293,27 @@ export default function RoutineSpecificationsScreen() {
         {/* Header */}
         <View style={styles.listHeader}>
           <Text style={styles.listTitle}>
-            {specs.length} {specs.length === 1 ? 'Spezifikation' : 'Spezifikationen'}
+            {t('routineSpecifications.specCount', { count: specs.length })}
           </Text>
           {canEdit && (
             <TouchableOpacity style={styles.addBtn} onPress={openCreate} activeOpacity={0.8}>
-              <Text style={styles.addBtnText}>+ Neu</Text>
+              <Text style={styles.addBtnText}>{t('routineSpecifications.newButton', '+ Neu')}</Text>
             </TouchableOpacity>
           )}
         </View>
 
         {isLoading ? (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>Lade Spezifikationen…</Text>
+            <Text style={styles.emptyText}>{t('routineSpecifications.loading', 'Lade Spezifikationen…')}</Text>
           </View>
         ) : specs.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyEmoji}>📋</Text>
-            <Text style={styles.emptyTitle}>Keine Spezifikationen</Text>
+            <Text style={styles.emptyTitle}>{t('routineSpecifications.emptyTitle', 'Keine Spezifikationen')}</Text>
             <Text style={styles.emptyText}>
               {canEdit
-                ? 'Lege eine neue Serienspezifikation an.'
-                : 'Es sind noch keine Spezifikationen vorhanden.'}
+                ? t('routineSpecifications.emptyTextCanEdit', 'Lege eine neue Serienspezifikation an.')
+                : t('routineSpecifications.emptyText', 'Es sind noch keine Spezifikationen vorhanden.')}
             </Text>
           </View>
         ) : (
@@ -320,14 +332,16 @@ export default function RoutineSpecificationsScreen() {
           <View style={styles.modalSheet}>
             <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
               <Text style={styles.modalTitle}>
-                {editingSpec ? 'Spezifikation bearbeiten' : 'Neue Serienspezifikation'}
+                {editingSpec
+                  ? t('routineSpecifications.editTitle', 'Spezifikation bearbeiten')
+                  : t('routineSpecifications.createTitle', 'Neue Serienspezifikation')}
               </Text>
 
               {/* Name */}
-              <FormField label="Name">
+              <FormField label={t('routineSpecifications.nameLabel', 'Name')}>
                 <TextInput
                   style={styles.input}
-                  placeholder="z. B. Pflicht 2025 U14"
+                  placeholder={t('routineSpecifications.namePlaceholder', 'z. B. Pflicht 2025 U14')}
                   placeholderTextColor={Colors.textTertiary}
                   value={form.name}
                   onChangeText={(v) => setForm((f) => ({ ...f, name: v }))}
@@ -336,20 +350,20 @@ export default function RoutineSpecificationsScreen() {
 
               {/* Sprünge & Gruppen */}
               <View style={styles.row2}>
-                <FormField label="Anzahl Sprünge" style={styles.halfField}>
+                <FormField label={t('routineSpecifications.numberOfDivesLabel', 'Anzahl Sprünge')} style={styles.halfField}>
                   <TextInput
                     style={styles.input}
-                    placeholder="z. B. 5"
+                    placeholder={t('routineSpecifications.numberOfDivesPlaceholder', 'z. B. 5')}
                     placeholderTextColor={Colors.textTertiary}
                     keyboardType="number-pad"
                     value={form.numberOfDives}
                     onChangeText={(v) => setForm((f) => ({ ...f, numberOfDives: v }))}
                   />
                 </FormField>
-                <FormField label="Anzahl Gruppen" style={styles.halfField}>
+                <FormField label={t('routineSpecifications.numberOfGroupsLabel', 'Anzahl Gruppen')} style={styles.halfField}>
                   <TextInput
                     style={styles.input}
-                    placeholder="z. B. 3"
+                    placeholder={t('routineSpecifications.numberOfGroupsPlaceholder', 'z. B. 3')}
                     placeholderTextColor={Colors.textTertiary}
                     keyboardType="number-pad"
                     value={form.numberOfGroups}
@@ -358,11 +372,11 @@ export default function RoutineSpecificationsScreen() {
                 </FormField>
               </View>
 
-              {/* Max DD */}
-              <FormField label="Max. Schwierigkeitsgrad (DD)">
+              {/* Max DD/SKG */}
+              <FormField label={t('routineSpecifications.maxDifficultyScoreLabel', 'Max. Schwierigkeitsgrad (SKG)')}>
                 <TextInput
                   style={styles.input}
-                  placeholder="z. B. 7.5"
+                  placeholder={t('routineSpecifications.maxDifficultyScorePlaceholder', 'z. B. 7.5')}
                   placeholderTextColor={Colors.textTertiary}
                   keyboardType="decimal-pad"
                   value={form.maxDifficultyScore}
@@ -371,14 +385,14 @@ export default function RoutineSpecificationsScreen() {
               </FormField>
 
               {/* Altersklasse-Dropdown */}
-              <FormField label="Altersklasse">
+              <FormField label={t('routineSpecifications.ageCategoryLabel', 'Altersklasse')}>
                 <TouchableOpacity
                   style={styles.dropdownBtn}
                   onPress={() => setAgeCatDropdownOpen((v) => !v)}
                   activeOpacity={0.8}
                 >
                   <Text style={[styles.dropdownBtnText, !selectedCat && styles.dropdownPlaceholder]}>
-                    {selectedCat ? selectedCat.name : 'Altersklasse wählen…'}
+                    {selectedCat ? selectedCat.name : t('routineSpecifications.selectAgeCategoryPlaceholder', 'Altersklasse wählen…')}
                   </Text>
                   <Text style={styles.dropdownChevron}>{ageCatDropdownOpen ? '▲' : '▼'}</Text>
                 </TouchableOpacity>
@@ -390,7 +404,7 @@ export default function RoutineSpecificationsScreen() {
                       onPress={() => { setForm((f) => ({ ...f, ageCategoryId: null })); setAgeCatDropdownOpen(false); }}
                     >
                       <Text style={[styles.dropdownItemText, form.ageCategoryId === null && styles.dropdownItemTextActive]}>
-                        Keine Altersklasse
+                        {t('routineSpecifications.noAgeCategory', 'Keine Altersklasse')}
                       </Text>
                     </TouchableOpacity>
                     {ageCategories.map((cat) => {
@@ -405,7 +419,11 @@ export default function RoutineSpecificationsScreen() {
                             {cat.name}
                           </Text>
                           <Text style={styles.dropdownItemMeta}>
-                            Jg. {currentYear - cat.fromYearOffset} – {currentYear - cat.toYearOffset}
+                            {t('routineSpecifications.birthYears', {
+                              from: currentYear - cat.fromYearOffset,
+                              to: currentYear - cat.toYearOffset,
+                              defaultValue: `Jg. ${currentYear - cat.fromYearOffset} – ${currentYear - cat.toYearOffset}`,
+                            })}
                           </Text>
                         </TouchableOpacity>
                       );
@@ -419,14 +437,14 @@ export default function RoutineSpecificationsScreen() {
                       }}
                       activeOpacity={0.7}
                     >
-                      <Text style={styles.createLinkText}>＋ Neue Altersklasse anlegen</Text>
+                      <Text style={styles.createLinkText}>{t('routineSpecifications.createAgeCategoryLink', '＋ Neue Altersklasse anlegen')}</Text>
                     </TouchableOpacity>
                   </View>
                 )}
               </FormField>
 
               {/* Geschlecht */}
-              <FormField label="Geschlecht">
+              <FormField label={t('routineSpecifications.genderLabel', 'Geschlecht')}>
                 <View style={styles.genderRow}>
                   {GENDER_OPTIONS.map((g) => (
                     <TouchableOpacity
@@ -438,7 +456,7 @@ export default function RoutineSpecificationsScreen() {
                       <Text
                         style={[styles.genderChipLabel, form.gender === g && styles.genderChipLabelActive]}
                       >
-                        {GENDER_LABELS[g]}
+                        {getGenderLabel(g)}
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -448,7 +466,7 @@ export default function RoutineSpecificationsScreen() {
               {/* Toggles */}
               <View style={styles.toggleRow}>
                 <View style={styles.toggleItem}>
-                  <Text style={styles.toggleLabel}>Juniortabelle erlaubt</Text>
+                  <Text style={styles.toggleLabel}>{t('routineSpecifications.juniorTableAllowed', 'Juniortabelle erlaubt')}</Text>
                   <Switch
                     value={form.juniorTableAllowed}
                     onValueChange={(v) => setForm((f) => ({ ...f, juniorTableAllowed: v }))}
@@ -457,7 +475,7 @@ export default function RoutineSpecificationsScreen() {
                   />
                 </View>
                 <View style={styles.toggleItem}>
-                  <Text style={styles.toggleLabel}>Anfänger</Text>
+                  <Text style={styles.toggleLabel}>{t('routineSpecifications.beginner', 'Anfänger')}</Text>
                   <Switch
                     value={form.beginner}
                     onValueChange={(v) => setForm((f) => ({ ...f, beginner: v }))}
@@ -473,7 +491,7 @@ export default function RoutineSpecificationsScreen() {
                   onPress={() => setModalVisible(false)}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.cancelBtnLabel}>Abbrechen</Text>
+                  <Text style={styles.cancelBtnLabel}>{t('common.cancel', 'Abbrechen')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.saveBtn, isSaving && styles.saveBtnDisabled]}
@@ -481,7 +499,9 @@ export default function RoutineSpecificationsScreen() {
                   disabled={isSaving}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.saveBtnLabel}>{isSaving ? 'Speichern…' : 'Speichern'}</Text>
+                  <Text style={styles.saveBtnLabel}>
+                    {isSaving ? t('routineSpecifications.saving', 'Speichern…') : t('common.save', 'Speichern')}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>
@@ -492,14 +512,24 @@ export default function RoutineSpecificationsScreen() {
       {/* ── Confirm Delete Modal ── */}
       <ConfirmModal
         visible={!!specToDelete}
-        title="Serienspezifikation löschen"
+        title={t('routineSpecifications.deleteModal.title', 'Serienspezifikation löschen')}
         message={
           specToDelete
-            ? `Möchtest du die Serienspezifikation „${specToDelete.name || `Spezifikation #${specToDelete.id}`}“ wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`
+            ? t('routineSpecifications.deleteModal.message', {
+                name:
+                  specToDelete.name ||
+                  t('routineSpecifications.defaultSpecName', {
+                    id: specToDelete.id,
+                    defaultValue: `Spezifikation #${specToDelete.id}`,
+                  }),
+                defaultValue: `Möchtest du die Serienspezifikation „${
+                  specToDelete.name || `Spezifikation #${specToDelete.id}`
+                }“ wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`,
+              })
             : ''
         }
-        confirmText="Löschen"
-        cancelText="Abbrechen"
+        confirmText={t('common.delete', 'Löschen')}
+        cancelText={t('common.cancel', 'Abbrechen')}
         variant="danger"
         isLoading={isDeletingSpec}
         onConfirm={confirmDelete}

@@ -365,9 +365,14 @@ export default function TrainingStatusScreen() {
         <View style={styles.routinesBannerLeft}>
           <Text style={styles.routinesBannerEmoji}>📋</Text>
           <View>
-            <Text style={styles.routinesBannerTitle}>Routinen (Serien)</Text>
+            <Text style={styles.routinesBannerTitle}>
+              {t('trainingStatus.routinesBannerTitle', 'Routinen (Serien)')}
+            </Text>
             <Text style={styles.routinesBannerSub}>
-              {routines.length} {routines.length === 1 ? 'Routine' : 'Routinen'} vorhanden
+              {t('trainingStatus.routinesBannerSub', {
+                count: routines.length,
+                defaultValue: `${routines.length} Routinen vorhanden`,
+              })}
             </Text>
           </View>
         </View>
