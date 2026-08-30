@@ -171,5 +171,14 @@
       "ROLE_ADMIN": "System Administrator",
       "ROLE_USER": "User"
     }
+  },
+  "routines": {
+    "errors": {
+      "ROUTINE_MAX_DIVES_EXCEEDED": "The maximum number of {{numberOfDives}} dives for this routine has already been reached.",
+      "ROUTINE_JUNIOR_TABLE_NOT_ALLOWED": "Dive {{diveCode}} is from the junior table and not allowed for this routine.",
+      "ROUTINE_MAX_DIFFICULTY_EXCEEDED": "Maximum degree of difficulty of {{maxDifficulty}} would be exceeded (current: {{currentDifficulty}}, new: {{newDifficulty}}).",
+      "ROUTINE_MIN_GROUPS_NOT_REACHABLE": "With this dive, the minimum number of {{numberOfGroups}} different groups can no longer be reached ({{missingGroups}} missing group(s), but only {{slotsRemaining}} slot(s) remaining).",
+      "unknown": "An unknown error occurred."
+    }
   }
 }

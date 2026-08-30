@@ -65,12 +65,20 @@ export default function AddDiveModal({
   });
 
   const filteredDives = query.trim()
-    ? availableDives.filter(
-        (d) =>
-          d.code.includes(query.trim()) ||
-          d.nameDe.toLowerCase().includes(query.toLowerCase()) ||
-          d.nameEn.toLowerCase().includes(query.toLowerCase())
-      )
+    ? availableDives.filter((d) => {
+        const q = query.trim().toLowerCase();
+        const qClean = q.replace(/\s+/g, '');
+        const matchBaseCode = d.code.toLowerCase().includes(q);
+        const matchFullCode = Object.keys(d.difficulties || {}).some(
+          (pos) => `${d.code}${pos}`.toLowerCase().includes(qClean) || `${d.code} ${pos}`.toLowerCase().includes(q)
+        );
+        return (
+          matchBaseCode ||
+          matchFullCode ||
+          d.nameDe.toLowerCase().includes(q) ||
+          d.nameEn.toLowerCase().includes(q)
+        );
+      })
     : availableDives;
 
   const isDE = i18n.language === 'de';

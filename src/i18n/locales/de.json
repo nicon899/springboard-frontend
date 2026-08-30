@@ -171,5 +171,14 @@
       "ROLE_ADMIN": "System-Administrator",
       "ROLE_USER": "Nutzer"
     }
+  },
+  "routines": {
+    "errors": {
+      "ROUTINE_MAX_DIVES_EXCEEDED": "Die maximale Anzahl von {{numberOfDives}} Sprüngen für diese Serie ist bereits erreicht.",
+      "ROUTINE_JUNIOR_TABLE_NOT_ALLOWED": "Sprung {{diveCode}} ist aus der Nachwuchstabelle und für diese Serie nicht erlaubt.",
+      "ROUTINE_MAX_DIFFICULTY_EXCEEDED": "Maximaler Schwierigkeitsgrad von {{maxDifficulty}} würde überschritten (aktuell: {{currentDifficulty}}, neu: {{newDifficulty}}).",
+      "ROUTINE_MIN_GROUPS_NOT_REACHABLE": "Mit diesem Sprung kann die Mindestanzahl von {{numberOfGroups}} verschiedenen Gruppen nicht mehr erreicht werden (noch {{missingGroups}} fehlende Gruppe(n), aber nur {{slotsRemaining}} Slot(s) übrig).",
+      "unknown": "Ein unbekannter Fehler ist aufgetreten."
+    }
   }
 }

@@ -273,6 +273,10 @@ export interface UpdateRoutineRequest {
   displayName?: string;
 }
 
+export interface AddDiveToRoutineRequest {
+  diveExecutionId: number;
+}
+
 export interface LoginRequest {
   email: string;
   password: string;
@@ -366,10 +370,23 @@ export const clearAuthSession = async (): Promise<void> => {
 
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  errorCode?: string;
+  messageParameters?: Record<string, any>;
+  raw?: any;
+
+  constructor(
+    message: string,
+    status: number,
+    errorCode?: string,
+    messageParameters?: Record<string, any>,
+    raw?: any
+  ) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.errorCode = errorCode;
+    this.messageParameters = messageParameters;
+    this.raw = raw;
   }
 }
 
@@ -401,13 +418,25 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   if (!res.ok) {
     let errorDetail = '';
+    let errorCode: string | undefined;
+    let messageParameters: Record<string, any> | undefined;
+    let raw: any;
     try {
       const errJson = await res.json();
+      raw = errJson;
       errorDetail = errJson.message || JSON.stringify(errJson);
+      errorCode = errJson.errorCode;
+      messageParameters = errJson.messageParameters || errJson.parameters;
     } catch {
       errorDetail = await res.text().catch(() => '');
     }
-    throw new ApiError(errorDetail || `Request failed with status ${res.status}`, res.status);
+    throw new ApiError(
+      errorDetail || `Request failed with status ${res.status}`,
+      res.status,
+      errorCode,
+      messageParameters,
+      raw
+    );
   }
 
   // If 204 No Content or empty body
@@ -698,6 +727,19 @@ export const api = {
 
   async deleteRoutine(id: number | string): Promise<void> {
     return request<void>(`/api/v1/routines/${id}`, { method: 'DELETE' });
+  },
+
+  async addDiveToRoutine(routineId: number | string, payload: AddDiveToRoutineRequest): Promise<RoutineResponse> {
+    return request<RoutineResponse>(`/api/v1/routines/${routineId}/dives`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async removeDiveFromRoutine(routineId: number | string, diveExecutionId: number | string): Promise<RoutineResponse> {
+    return request<RoutineResponse>(`/api/v1/routines/${routineId}/dives/${diveExecutionId}`, {
+      method: 'DELETE',
+    });
   },
 
   // ── Age Categories (Altersklassen) ──

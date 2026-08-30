@@ -55,11 +55,16 @@ export function mapApiDivesToDefinitions(apiExecutions: DiveExecutionResponse[])
 
 export function searchDives(query: string, diveList: DiveDefinition[] = []): DiveDefinition[] {
   const q = query.trim().toLowerCase();
+  const qClean = q.replace(/\s+/g, '');
   if (!q) return [];
-  return diveList.filter(
-    (d) =>
-      d.code.toLowerCase().includes(q) ||
-      d.nameDe.toLowerCase().includes(q) ||
-      d.nameEn.toLowerCase().includes(q)
-  );
+  return diveList.filter((d) => {
+    const matchBaseCode = d.code.toLowerCase().includes(q);
+    const matchFullCode = Object.keys(d.difficulties || {}).some(
+      (pos) => `${d.code}${pos}`.toLowerCase().includes(qClean) || `${d.code} ${pos}`.toLowerCase().includes(q)
+    );
+    const matchNameDe = d.nameDe?.toLowerCase().includes(q);
+    const matchNameEn = d.nameEn?.toLowerCase().includes(q);
+
+    return matchBaseCode || matchFullCode || matchNameDe || matchNameEn;
+  });
 }
