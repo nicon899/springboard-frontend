@@ -27,8 +27,8 @@ function AppGate() {
     const currentScreen = segments[1] as string | undefined;
 
     if (!user) {
-      // Nicht eingeloggt → Auth-Screen
-      if (currentScreen !== 'auth') {
+      // Nicht eingeloggt → Auth-Screen (außer Sprungsuche)
+      if (currentScreen !== 'auth' && currentScreen !== 'dive-search') {
         router.replace('/(drawer)/auth');
       }
       return;

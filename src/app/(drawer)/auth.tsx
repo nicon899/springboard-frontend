@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 
+import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -27,6 +28,7 @@ type Tab = 'login' | 'register';
 export default function AuthScreen() {
   const { t } = useTranslation();
   const { login, registerWithInvite, isLoading } = useAuth();
+  const router = useRouter();
 
   const [tab, setTab] = useState<Tab>('login');
 
@@ -272,6 +274,17 @@ export default function AuthScreen() {
             </>
           )}
         </View>
+
+        {/* Sprungsuche für Gäste */}
+        <TouchableOpacity
+          style={styles.guestSearchBtn}
+          onPress={() => router.push('/(drawer)/dive-search')}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.guestSearchText}>
+            🔍 {t('nav.diveSearch', 'Sprungsuche')} {t('auth.useWithoutLogin', 'ohne Anmeldung nutzen')}
+          </Text>
+        </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -313,6 +326,22 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.lg,
     padding: Spacing.xl,
     ...Shadows.md,
+  },
+  guestSearchBtn: {
+    marginTop: Spacing.lg,
+    paddingVertical: Spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    ...Shadows.sm,
+  },
+  guestSearchText: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semiBold,
+    color: Colors.primary,
   },
   segmentedControl: {
     flexDirection: 'row',

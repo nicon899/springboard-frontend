@@ -58,6 +58,7 @@
     "welcomeBack": "Willkommen zurück!",
     "loginSubtitle": "Melde dich mit deinem Springboard-Konto an.",
     "registerSubtitle": "Registriere dich mit deinem Einladungs-Link.",
+    "useWithoutLogin": "ohne Anmeldung nutzen",
     "errors": {
       "emailRequired": "E-Mail ist erforderlich",
       "emailInvalid": "Ungültige E-Mail-Adresse",

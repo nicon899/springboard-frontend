@@ -58,6 +58,7 @@
     "welcomeBack": "Welcome back!",
     "loginSubtitle": "Sign in with your Springboard account.",
     "registerSubtitle": "Register using your invitation link.",
+    "useWithoutLogin": "use without login",
     "errors": {
       "emailRequired": "Email is required",
       "emailInvalid": "Invalid email address",
