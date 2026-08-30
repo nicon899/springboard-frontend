@@ -328,12 +328,17 @@ export default function RoutinesScreen() {
   } | null>(null);
   const [isRemovingDive, setIsRemovingDive] = useState(false);
 
-  // Sort / Reorder states
+  // Sort / Reorder states (Dives & Routinen)
   const [isReorderingRoutineId, setIsReorderingRoutineId] = useState<number | null>(null);
   const [sortModalVisible, setSortModalVisible] = useState(false);
   const [sortModalRoutine, setSortModalRoutine] = useState<RoutineResponse | null>(null);
   const [sortModalDives, setSortModalDives] = useState<DiveExecutionResponse[]>([]);
   const [isSavingOrder, setIsSavingOrder] = useState(false);
+
+  const [isReorderingRoutines, setIsReorderingRoutines] = useState(false);
+  const [sortRoutinesModalVisible, setSortRoutinesModalVisible] = useState(false);
+  const [sortRoutinesModalList, setSortRoutinesModalList] = useState<RoutineResponse[]>([]);
+  const [isSavingRoutinesOrder, setIsSavingRoutinesOrder] = useState(false);
 
   // Expanded state per routine ID (default: false / collapsed)
   const [expandedRoutines, setExpandedRoutines] = useState<Record<number, boolean>>({});
@@ -698,6 +703,127 @@ export default function RoutinesScreen() {
     }
   };
 
+  // ── Routinen-Reihenfolge inline verschieben (Hoch/Runter) ──
+  const handleMoveRoutine = async (currentIndex: number, direction: -1 | 1) => {
+    if (!targetUserId) return;
+    const newIndex = currentIndex + direction;
+    if (newIndex < 0 || newIndex >= routines.length) return;
+
+    const newRoutines = [...routines];
+    const [moved] = newRoutines.splice(currentIndex, 1);
+    newRoutines.splice(newIndex, 0, moved);
+
+    const prevRoutines = routines;
+    setRoutines(newRoutines);
+    setIsReorderingRoutines(true);
+
+    try {
+      const updated = await api.reorderRoutines(
+        targetUserId,
+        newRoutines.map((r) => r.id)
+      );
+      if (updated && updated.length > 0) {
+        setRoutines(updated);
+      }
+    } catch (e: any) {
+      setRoutines(prevRoutines);
+      showToast(getErrorMessage(e), 'error');
+    } finally {
+      setIsReorderingRoutines(false);
+    }
+  };
+
+  // ── Routinen Sortier-Modal öffnen & steuern ──
+  const openSortRoutinesModal = () => {
+    setSortRoutinesModalList([...routines]);
+    setSortRoutinesModalVisible(true);
+  };
+
+  const handleModalMoveRoutine = (currentIndex: number, targetIndex: number) => {
+    if (targetIndex < 0 || targetIndex >= sortRoutinesModalList.length) return;
+    const list = [...sortRoutinesModalList];
+    const [moved] = list.splice(currentIndex, 1);
+    list.splice(targetIndex, 0, moved);
+    setSortRoutinesModalList(list);
+  };
+
+  const handlePresetSortRoutines = (
+    type:
+      | 'createdDesc'
+      | 'createdAsc'
+      | 'updatedDesc'
+      | 'nameAsc'
+      | 'nameDesc'
+      | 'divesDesc'
+      | 'divesAsc'
+      | 'ddDesc'
+      | 'ddAsc'
+  ) => {
+    const list = [...sortRoutinesModalList];
+    if (type === 'createdDesc') {
+      list.sort((a, b) => {
+        if (a.createdAt && b.createdAt) {
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        }
+        return (b.index ?? b.id) - (a.index ?? a.id);
+      });
+    } else if (type === 'createdAsc') {
+      list.sort((a, b) => {
+        if (a.createdAt && b.createdAt) {
+          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        }
+        return (a.index ?? a.id) - (b.index ?? b.id);
+      });
+    } else if (type === 'updatedDesc') {
+      list.sort((a, b) => {
+        const timeA = a.updatedAt ? new Date(a.updatedAt).getTime() : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+        const timeB = b.updatedAt ? new Date(b.updatedAt).getTime() : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
+        return timeB - timeA || (b.index ?? b.id) - (a.index ?? a.id);
+      });
+    } else if (type === 'nameAsc') {
+      list.sort((a, b) => getRoutineTitle(a).localeCompare(getRoutineTitle(b), undefined, { numeric: true }));
+    } else if (type === 'nameDesc') {
+      list.sort((a, b) => getRoutineTitle(b).localeCompare(getRoutineTitle(a), undefined, { numeric: true }));
+    } else if (type === 'divesDesc') {
+      list.sort((a, b) => (b.diveExecutions?.length ?? 0) - (a.diveExecutions?.length ?? 0));
+    } else if (type === 'divesAsc') {
+      list.sort((a, b) => (a.diveExecutions?.length ?? 0) - (b.diveExecutions?.length ?? 0));
+    } else if (type === 'ddDesc') {
+      list.sort((a, b) => {
+        const ddA = a.diveExecutions?.reduce((s, d) => s + (d.degreeOfDifficulty || 0), 0) ?? 0;
+        const ddB = b.diveExecutions?.reduce((s, d) => s + (d.degreeOfDifficulty || 0), 0) ?? 0;
+        return ddB - ddA;
+      });
+    } else if (type === 'ddAsc') {
+      list.sort((a, b) => {
+        const ddA = a.diveExecutions?.reduce((s, d) => s + (d.degreeOfDifficulty || 0), 0) ?? 0;
+        const ddB = b.diveExecutions?.reduce((s, d) => s + (d.degreeOfDifficulty || 0), 0) ?? 0;
+        return ddA - ddB;
+      });
+    }
+    setSortRoutinesModalList(list);
+  };
+
+  const handleSaveRoutinesModalOrder = async () => {
+    if (!targetUserId) return;
+    setIsSavingRoutinesOrder(true);
+    try {
+      const updated = await api.reorderRoutines(
+        targetUserId,
+        sortRoutinesModalList.map((r) => r.id)
+      );
+      if (updated && updated.length > 0) {
+        setRoutines(updated);
+      }
+      setSortRoutinesModalVisible(false);
+      showToast(t('routines.toasts.reorderRoutinesSuccess', 'Reihenfolge der Routinen erfolgreich gespeichert'), 'success');
+    } catch (e: any) {
+      showToast(getErrorMessage(e), 'error');
+    } finally {
+      setIsSavingRoutinesOrder(false);
+    }
+  };
+
   // ── Match Counts (Valide vs. Gesamt für aktuelle Filter) ──
   const { validCount, totalMatchingCount, athleteMatchingCount } = useMemo(() => {
     let valid = 0;
@@ -825,7 +951,7 @@ export default function RoutinesScreen() {
   ]);
 
   // ── Routine-Karte ──
-  const renderRoutine = (routine: RoutineResponse) => {
+  const renderRoutine = (routine: RoutineResponse, routineIdx: number) => {
     const spec = routine.template;
     const diveCount = routine.diveExecutions?.length ?? 0;
     const totalDD = routine.diveExecutions?.reduce((sum, de) => sum + (de.degreeOfDifficulty || 0), 0) ?? 0;
@@ -833,6 +959,8 @@ export default function RoutinesScreen() {
     const isExpanded = expandedRoutines[routine.id] === true;
     const isIncomplete = spec?.numberOfDives != null && diveCount < spec.numberOfDives;
     const missingDives = spec?.numberOfDives != null ? spec.numberOfDives - diveCount : 0;
+    const isRoutineFirst = routineIdx === 0;
+    const isRoutineLast = routineIdx === routines.length - 1;
 
     const athleteAge = athleteProfile?.age ?? (targetUserId === user?.id ? user?.age : undefined);
     const ageCat = spec?.ageCategory;
@@ -887,6 +1015,26 @@ export default function RoutinesScreen() {
             </View>
           </TouchableOpacity>
           <View style={styles.routineHeaderRight}>
+            {canEdit && routines.length > 1 && (
+              <View style={styles.reorderBtnCol}>
+                <TouchableOpacity
+                  style={[styles.reorderArrowBtn, isRoutineFirst && styles.reorderArrowBtnDisabled]}
+                  onPress={() => handleMoveRoutine(routineIdx, -1)}
+                  disabled={isRoutineFirst || isReorderingRoutines}
+                  activeOpacity={0.6}
+                >
+                  <Text style={[styles.reorderArrowText, isRoutineFirst && styles.reorderArrowTextDisabled]}>▲</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.reorderArrowBtn, isRoutineLast && styles.reorderArrowBtnDisabled]}
+                  onPress={() => handleMoveRoutine(routineIdx, 1)}
+                  disabled={isRoutineLast || isReorderingRoutines}
+                  activeOpacity={0.6}
+                >
+                  <Text style={[styles.reorderArrowText, isRoutineLast && styles.reorderArrowTextDisabled]}>▼</Text>
+                </TouchableOpacity>
+              </View>
+            )}
             {canEdit && (
               <View style={styles.routineActions}>
                 <TouchableOpacity
@@ -1245,7 +1393,14 @@ export default function RoutinesScreen() {
     );
   }
 
-  const isAnyModalOpen = createModalVisible || editModalVisible || addDiveModalVisible;
+  const isAnyModalOpen =
+    createModalVisible ||
+    editModalVisible ||
+    addDiveModalVisible ||
+    sortModalVisible ||
+    sortRoutinesModalVisible ||
+    !!routineToDelete ||
+    !!diveToRemove;
 
   return (
     <View style={styles.container}>
@@ -1264,15 +1419,28 @@ export default function RoutinesScreen() {
           <Text style={styles.listTitle}>
             {t('routines.routineCount', { count: routines.length })}
           </Text>
-          {canEdit && (
-            <TouchableOpacity
-              style={styles.addBtn}
-              onPress={() => { setSelectedSpecId(null); setCreateModalVisible(true); }}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.addBtnText}>{t('routines.newRoutineBtn', '+ Neue Routine')}</Text>
-            </TouchableOpacity>
-          )}
+          <View style={styles.listHeaderActions}>
+            {canEdit && routines.length > 1 && (
+              <TouchableOpacity
+                style={styles.sortRoutinesBtn}
+                onPress={openSortRoutinesModal}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.sortRoutinesBtnText}>
+                  {t('routines.sortRoutinesBtn', '⇅ Routinen sortieren')}
+                </Text>
+              </TouchableOpacity>
+            )}
+            {canEdit && (
+              <TouchableOpacity
+                style={styles.addBtn}
+                onPress={() => { setSelectedSpecId(null); setCreateModalVisible(true); }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.addBtnText}>{t('routines.newRoutineBtn', '+ Neue Routine')}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         {isLoading ? (
@@ -1291,7 +1459,7 @@ export default function RoutinesScreen() {
             </Text>
           </View>
         ) : (
-          routines.map(renderRoutine)
+          routines.map((routine, idx) => renderRoutine(routine, idx))
         )}
       </ScrollView>
 
@@ -1876,6 +2044,194 @@ export default function RoutinesScreen() {
         </View>
       </Modal>
 
+      {/* ── Routinen-Sortier-Modal ── */}
+      <Modal
+        visible={sortRoutinesModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setSortRoutinesModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Toast toast={toast} onDismiss={() => setToast(null)} />
+          <View style={[styles.modalSheet, styles.sortModalSheet]}>
+            <View style={styles.sortModalHeader}>
+              <View style={{ flex: 1, marginRight: Spacing.sm }}>
+                <Text style={styles.modalTitle}>{t('routines.sortRoutinesModal.title', 'Routinen sortieren')}</Text>
+                <Text style={styles.sortModalSub}>
+                  {t('routines.sortRoutinesModal.subtitle', {
+                    name: athleteLabel,
+                    defaultValue: `Reihenfolge der Routinen von ${athleteLabel}`,
+                  })}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.closeModalBtn}
+                onPress={() => setSortRoutinesModalVisible(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.closeModalBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.sortSectionLabel}>{t('routines.sortRoutinesModal.quickSort', 'Schnell-Sortierung')}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.presetScroll}>
+              <View style={styles.presetRow}>
+                <TouchableOpacity
+                  style={styles.presetChip}
+                  onPress={() => handlePresetSortRoutines('createdDesc')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.presetChipText}>{t('routines.sortRoutinesModal.presetCreatedDesc', '🕒 Erstellung (neueste)')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.presetChip}
+                  onPress={() => handlePresetSortRoutines('createdAsc')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.presetChipText}>{t('routines.sortRoutinesModal.presetCreatedAsc', '🕒 Erstellung (älteste)')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.presetChip}
+                  onPress={() => handlePresetSortRoutines('updatedDesc')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.presetChipText}>{t('routines.sortRoutinesModal.presetUpdatedDesc', '🔄 Zuletzt aktualisiert')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.presetChip}
+                  onPress={() => handlePresetSortRoutines('nameAsc')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.presetChipText}>{t('routines.sortRoutinesModal.presetNameAsc', '🔤 Name (A–Z)')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.presetChip}
+                  onPress={() => handlePresetSortRoutines('nameDesc')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.presetChipText}>{t('routines.sortRoutinesModal.presetNameDesc', '🔤 Name (Z–A)')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.presetChip}
+                  onPress={() => handlePresetSortRoutines('divesDesc')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.presetChipText}>{t('routines.sortRoutinesModal.presetDivesDesc', '🔢 Meiste Sprünge')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.presetChip}
+                  onPress={() => handlePresetSortRoutines('divesAsc')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.presetChipText}>{t('routines.sortRoutinesModal.presetDivesAsc', '🔢 Wenigste Sprünge')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.presetChip}
+                  onPress={() => handlePresetSortRoutines('ddDesc')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.presetChipText}>{t('routines.sortRoutinesModal.presetDdDesc', '📈 Höchste SKG')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.presetChip}
+                  onPress={() => handlePresetSortRoutines('ddAsc')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.presetChipText}>{t('routines.sortRoutinesModal.presetDdAsc', '📉 Niedrigste SKG')}</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+
+            <Text style={styles.sortSectionLabel}>
+              {t('routines.sortRoutinesModal.customOrder', {
+                count: sortRoutinesModalList.length,
+                defaultValue: `Reihenfolge anpassen (${sortRoutinesModalList.length} Routinen)`,
+              })}
+            </Text>
+            <ScrollView style={styles.sortModalList} showsVerticalScrollIndicator={true}>
+              {sortRoutinesModalList.map((r, idx) => {
+                const title = getRoutineTitle(r);
+                const count = r.diveExecutions?.length ?? 0;
+                const totalDD = r.diveExecutions?.reduce((sum, de) => sum + (de.degreeOfDifficulty || 0), 0) ?? 0;
+                const isFirst = idx === 0;
+                const isLast = idx === sortRoutinesModalList.length - 1;
+
+                let metaParts: string[] = [];
+                if (r.template?.name && r.displayName) {
+                  metaParts.push(r.template.name);
+                }
+                metaParts.push(`${count} ${count === 1 ? 'Sprung' : 'Sprünge'}`);
+                metaParts.push(`SKG ${totalDD.toFixed(1)}`);
+                if (r.updatedAt) {
+                  const d = new Date(r.updatedAt);
+                  metaParts.push(`Aktualisiert: ${d.toLocaleDateString()}`);
+                } else if (r.createdAt) {
+                  const d = new Date(r.createdAt);
+                  metaParts.push(`Erstellt: ${d.toLocaleDateString()}`);
+                }
+
+                return (
+                  <View key={`${r.id}-${idx}`} style={styles.sortModalItem}>
+                    <View style={styles.sortModalItemIndex}>
+                      <Text style={styles.sortModalItemIndexText}>#{idx + 1}</Text>
+                    </View>
+                    <View style={styles.sortModalItemInfo}>
+                      <Text style={styles.sortModalItemName} numberOfLines={1}>
+                        {title}
+                      </Text>
+                      <Text style={styles.sortModalItemMeta} numberOfLines={1}>
+                        {metaParts.join(' · ')}
+                      </Text>
+                    </View>
+                    <View style={styles.sortModalItemActions}>
+                      <TouchableOpacity
+                        style={[styles.sortActionBtn, isFirst && styles.sortActionBtnDisabled]}
+                        onPress={() => handleModalMoveRoutine(idx, idx - 1)}
+                        disabled={isFirst}
+                        activeOpacity={0.6}
+                      >
+                        <Text style={styles.sortActionBtnText}>▲</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.sortActionBtn, isLast && styles.sortActionBtnDisabled]}
+                        onPress={() => handleModalMoveRoutine(idx, idx + 1)}
+                        disabled={isLast}
+                        activeOpacity={0.6}
+                      >
+                        <Text style={styles.sortActionBtnText}>▼</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })}
+            </ScrollView>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => setSortRoutinesModalVisible(false)}
+                disabled={isSavingRoutinesOrder}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.cancelBtnLabel}>{t('common.cancel', 'Abbrechen')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.saveBtn, isSavingRoutinesOrder && styles.saveBtnDisabled]}
+                onPress={handleSaveRoutinesModalOrder}
+                disabled={isSavingRoutinesOrder}
+                activeOpacity={0.8}
+              >
+                {isSavingRoutinesOrder ? (
+                  <ActivityIndicator size="small" color={Colors.white} />
+                ) : (
+                  <Text style={styles.saveBtnLabel}>{t('routines.sortRoutinesModal.saveOrder', 'Reihenfolge speichern')}</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* ── Confirm Delete Routine Modal ── */}
       <ConfirmModal
         visible={!!routineToDelete}
@@ -1951,6 +2307,27 @@ const styles = StyleSheet.create({
     color: Colors.textTertiary,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
+  },
+  listHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  sortRoutinesBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    ...Shadows.sm,
+  },
+  sortRoutinesBtnText: {
+    color: Colors.primary,
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.semiBold,
   },
   addBtn: {
     backgroundColor: Colors.primary,

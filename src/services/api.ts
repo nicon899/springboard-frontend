@@ -260,6 +260,8 @@ export interface RoutineResponse {
   userFullName: string;
   template?: RoutineSpecificationResponse;
   diveExecutions: DiveExecutionResponse[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface CreateRoutineRequest {
@@ -766,6 +768,13 @@ export const api = {
       }
       throw e;
     }
+  },
+
+  async reorderRoutines(userId: number | string, routineIds: number[]): Promise<RoutineResponse[]> {
+    return await request<RoutineResponse[]>(`/api/v1/routines/user/${userId}/reorder`, {
+      method: 'PUT',
+      body: JSON.stringify({ routineIds }),
+    });
   },
 
   // ── Age Categories (Altersklassen) ──

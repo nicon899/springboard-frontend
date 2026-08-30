@@ -260,6 +260,7 @@
     "ageCategoryMismatchBanner": "Altersklasse unpassend: „{{category}}“ ({{range}}) passt nicht zum Alter des Sportlers ({{athleteAge}} Jahre).",
     "divesSectionTitle": "Sprünge in dieser Routine",
     "sortBtn": "⇅ Sortieren",
+    "sortRoutinesBtn": "⇅ Routinen sortieren",
     "addDiveBtn": "+ Sprung hinzufügen",
     "noDivesText": "Noch keine Sprünge in dieser Routine.",
     "addFirstDiveBtn": "+ Ersten Sprung hinzufügen",
@@ -286,7 +287,8 @@
       "addDiveSuccess": "Sprung {{dive}} hinzugefügt",
       "replaceDiveSuccess": "Sprung {{oldDive}} durch {{dive}} ersetzt",
       "removeDiveSuccess": "Sprung entfernt",
-      "reorderSuccess": "Reihenfolge erfolgreich gespeichert"
+      "reorderSuccess": "Reihenfolge erfolgreich gespeichert",
+      "reorderRoutinesSuccess": "Reihenfolge der Routinen erfolgreich gespeichert"
     },
     "createModal": {
       "title": "Neue Routine anlegen",
@@ -342,6 +344,23 @@
       "presetCode": "🔢 Nach Nummer",
       "customOrder": "Reihenfolge anpassen ({{count}} Sprünge)",
       "customOrder_one": "Reihenfolge anpassen ({{count}} Sprung)",
+      "saveOrder": "Reihenfolge speichern"
+    },
+    "sortRoutinesModal": {
+      "title": "Routinen sortieren",
+      "subtitle": "Reihenfolge der Routinen von {{name}}",
+      "quickSort": "Schnell-Sortierung",
+      "presetCreatedDesc": "🕒 Erstellung (neueste)",
+      "presetCreatedAsc": "🕒 Erstellung (älteste)",
+      "presetUpdatedDesc": "🔄 Zuletzt aktualisiert",
+      "presetNameAsc": "🔤 Name (A–Z)",
+      "presetNameDesc": "🔤 Name (Z–A)",
+      "presetDivesDesc": "🔢 Meiste Sprünge",
+      "presetDivesAsc": "🔢 Wenigste Sprünge",
+      "presetDdDesc": "📈 Höchste SKG",
+      "presetDdAsc": "📉 Niedrigste SKG",
+      "customOrder": "Reihenfolge anpassen ({{count}} Routinen)",
+      "customOrder_one": "Reihenfolge anpassen ({{count}} Routine)",
       "saveOrder": "Reihenfolge speichern"
     },
     "deleteModal": {

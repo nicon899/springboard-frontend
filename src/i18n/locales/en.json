@@ -255,6 +255,7 @@
     "ageCategoryMismatchBadge": "Age mismatch ({{category}})",
     "ageCategoryMismatchBanner": "Age category mismatch: \"{{category}}\" ({{range}}) does not match athlete's age ({{athleteAge}} yrs).",
     "sortBtn": "⇅ Sort",
+    "sortRoutinesBtn": "⇅ Sort Routines",
     "addDiveBtn": "+ Add Dive",
     "noDivesText": "No dives in this routine yet.",
     "addFirstDiveBtn": "+ Add First Dive",
@@ -282,7 +283,8 @@
       "addDiveSuccess": "Dive {{dive}} added",
       "replaceDiveSuccess": "Dive {{oldDive}} replaced by {{dive}}",
       "removeDiveSuccess": "Dive removed",
-      "reorderSuccess": "Order saved successfully"
+      "reorderSuccess": "Order saved successfully",
+      "reorderRoutinesSuccess": "Routine order saved successfully"
     },
     "createModal": {
       "title": "Create New Routine",
@@ -337,6 +339,23 @@
       "presetDdDesc": "📉 DD Descending",
       "presetCode": "🔢 By Number",
       "customOrder": "Custom Order ({{count}} Dives)",
+      "saveOrder": "Save Order"
+    },
+    "sortRoutinesModal": {
+      "title": "Sort Routines",
+      "subtitle": "Order of routines for {{name}}",
+      "quickSort": "Quick Sort",
+      "presetCreatedDesc": "🕒 Created (Newest)",
+      "presetCreatedAsc": "🕒 Created (Oldest)",
+      "presetUpdatedDesc": "🔄 Recently Updated",
+      "presetNameAsc": "🔤 Name (A–Z)",
+      "presetNameDesc": "🔤 Name (Z–A)",
+      "presetDivesDesc": "🔢 Most Dives",
+      "presetDivesAsc": "🔢 Fewest Dives",
+      "presetDdDesc": "📈 Highest DD",
+      "presetDdAsc": "📉 Lowest DD",
+      "customOrder": "Custom Order ({{count}} Routines)",
+      "customOrder_one": "Custom Order ({{count}} Routine)",
       "saveOrder": "Save Order"
     },
     "deleteModal": {
