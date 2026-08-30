@@ -266,11 +266,13 @@ export interface CreateRoutineRequest {
   userId: number;
   specificationId?: number;
   displayName?: string;
+  diveExecutionIds?: number[];
 }
 
 export interface UpdateRoutineRequest {
   specificationId?: number;
   displayName?: string;
+  diveExecutionIds?: number[];
 }
 
 export interface AddDiveToRoutineRequest {
@@ -740,6 +742,30 @@ export const api = {
     return request<RoutineResponse>(`/api/v1/routines/${routineId}/dives/${diveExecutionId}`, {
       method: 'DELETE',
     });
+  },
+
+  async reorderDivesInRoutine(routineId: number | string, diveExecutionIds: number[]): Promise<RoutineResponse> {
+    try {
+      return await request<RoutineResponse>(`/api/v1/routines/${routineId}/dives`, {
+        method: 'PUT',
+        body: JSON.stringify({ diveExecutionIds }),
+      });
+    } catch (e: any) {
+      if (e?.status === 404 || e?.status === 405) {
+        try {
+          return await request<RoutineResponse>(`/api/v1/routines/${routineId}/dives/reorder`, {
+            method: 'PUT',
+            body: JSON.stringify({ diveExecutionIds }),
+          });
+        } catch {
+          return await request<RoutineResponse>(`/api/v1/routines/${routineId}`, {
+            method: 'PUT',
+            body: JSON.stringify({ diveExecutionIds }),
+          });
+        }
+      }
+      throw e;
+    }
   },
 
   // ── Age Categories (Altersklassen) ──

@@ -170,6 +170,13 @@ export default function RoutinesScreen() {
   } | null>(null);
   const [isRemovingDive, setIsRemovingDive] = useState(false);
 
+  // Sort / Reorder states
+  const [isReorderingRoutineId, setIsReorderingRoutineId] = useState<number | null>(null);
+  const [sortModalVisible, setSortModalVisible] = useState(false);
+  const [sortModalRoutine, setSortModalRoutine] = useState<RoutineResponse | null>(null);
+  const [sortModalDives, setSortModalDives] = useState<DiveExecutionResponse[]>([]);
+  const [isSavingOrder, setIsSavingOrder] = useState(false);
+
   // ── Daten laden ──
   const loadData = useCallback(async () => {
     if (!targetUserId || !activeClubId) return;
@@ -331,6 +338,94 @@ export default function RoutinesScreen() {
     }
   };
 
+  // ── Sprung-Reihenfolge inline verschieben (Hoch/Runter) ──
+  const handleMoveDive = async (
+    routine: RoutineResponse,
+    currentIndex: number,
+    direction: -1 | 1
+  ) => {
+    const newIndex = currentIndex + direction;
+    if (!routine.diveExecutions || newIndex < 0 || newIndex >= routine.diveExecutions.length) return;
+
+    const newDives = [...routine.diveExecutions];
+    const [moved] = newDives.splice(currentIndex, 1);
+    newDives.splice(newIndex, 0, moved);
+
+    const prevRoutines = routines;
+    setRoutines((prev) =>
+      prev.map((r) => (r.id === routine.id ? { ...r, diveExecutions: newDives } : r))
+    );
+
+    setIsReorderingRoutineId(routine.id);
+    try {
+      const updated = await api.reorderDivesInRoutine(
+        routine.id,
+        newDives.map((d) => d.id)
+      );
+      if (updated && updated.diveExecutions) {
+        setRoutines((prev) =>
+          prev.map((r) => (r.id === updated.id ? updated : r))
+        );
+      }
+    } catch (e: any) {
+      setRoutines(prevRoutines);
+      showToast(getErrorMessage(e), 'error');
+    } finally {
+      setIsReorderingRoutineId(null);
+    }
+  };
+
+  // ── Sortier-Modal öffnen & steuern ──
+  const openSortModal = (routine: RoutineResponse) => {
+    setSortModalRoutine(routine);
+    setSortModalDives([...(routine.diveExecutions || [])]);
+    setSortModalVisible(true);
+  };
+
+  const handleModalMoveItem = (currentIndex: number, targetIndex: number) => {
+    if (targetIndex < 0 || targetIndex >= sortModalDives.length) return;
+    const newDives = [...sortModalDives];
+    const [moved] = newDives.splice(currentIndex, 1);
+    newDives.splice(targetIndex, 0, moved);
+    setSortModalDives(newDives);
+  };
+
+  const handlePresetSort = (type: 'group' | 'ddAsc' | 'ddDesc' | 'code') => {
+    const list = [...sortModalDives];
+    if (type === 'group') {
+      list.sort((a, b) => a.groupNumber - b.groupNumber || a.diveCode.localeCompare(b.diveCode));
+    } else if (type === 'ddAsc') {
+      list.sort((a, b) => a.degreeOfDifficulty - b.degreeOfDifficulty);
+    } else if (type === 'ddDesc') {
+      list.sort((a, b) => b.degreeOfDifficulty - a.degreeOfDifficulty);
+    } else if (type === 'code') {
+      list.sort((a, b) => a.diveCode.localeCompare(b.diveCode, undefined, { numeric: true }));
+    }
+    setSortModalDives(list);
+  };
+
+  const handleSaveModalOrder = async () => {
+    if (!sortModalRoutine) return;
+    setIsSavingOrder(true);
+    try {
+      const updated = await api.reorderDivesInRoutine(
+        sortModalRoutine.id,
+        sortModalDives.map((d) => d.id)
+      );
+      if (updated && updated.diveExecutions) {
+        setRoutines((prev) =>
+          prev.map((r) => (r.id === updated.id ? updated : r))
+        );
+      }
+      setSortModalVisible(false);
+      showToast('Reihenfolge erfolgreich gespeichert', 'success');
+    } catch (e: any) {
+      showToast(getErrorMessage(e), 'error');
+    } finally {
+      setIsSavingOrder(false);
+    }
+  };
+
   // ── Gefilterte Sprungvarianten für Modal ──
   const filteredCatalogExecutions = useMemo(() => {
     const q = diveSearchQuery.trim().toLowerCase();
@@ -487,15 +582,26 @@ export default function RoutinesScreen() {
         <View style={styles.divesSection}>
           <View style={styles.divesSectionHeader}>
             <Text style={styles.divesSectionTitle}>Sprünge in dieser Routine</Text>
-            {canEdit && (
-              <TouchableOpacity
-                style={styles.addDiveInlineBtn}
-                onPress={() => openAddDiveModal(routine)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.addDiveInlineText}>+ Sprung hinzufügen</Text>
-              </TouchableOpacity>
-            )}
+            <View style={styles.divesHeaderActions}>
+              {canEdit && diveCount > 1 && (
+                <TouchableOpacity
+                  style={styles.sortInlineBtn}
+                  onPress={() => openSortModal(routine)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.sortInlineBtnText}>⇅ Sortieren</Text>
+                </TouchableOpacity>
+              )}
+              {canEdit && (
+                <TouchableOpacity
+                  style={styles.addDiveInlineBtn}
+                  onPress={() => openAddDiveModal(routine)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.addDiveInlineText}>+ Sprung hinzufügen</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
 
           {diveCount === 0 ? (
@@ -516,9 +622,42 @@ export default function RoutinesScreen() {
               const heightText = BACKEND_TO_HEIGHT[de.height] ?? de.height;
               const posLabel = POSITION_NAMES[de.execution] ?? de.execution;
               const groupName = DIVE_GROUP_NAMES[de.groupNumber]?.de ?? `Gr. ${de.groupNumber}`;
+              const isFirst = idx === 0;
+              const isLast = idx === routine.diveExecutions.length - 1;
+              const isReorderingThis = isReorderingRoutineId === routine.id;
 
               return (
                 <View key={`${de.id}-${idx}`} style={styles.diveRow}>
+                  {canEdit && routine.diveExecutions.length > 1 && (
+                    <View style={styles.reorderBtnCol}>
+                      <TouchableOpacity
+                        style={[styles.reorderArrowBtn, isFirst && styles.reorderArrowBtnDisabled]}
+                        onPress={() => handleMoveDive(routine, idx, -1)}
+                        disabled={isFirst || isReorderingThis}
+                        activeOpacity={0.6}
+                      >
+                        <Text style={[styles.reorderArrowText, isFirst && styles.reorderArrowTextDisabled]}>▲</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.reorderArrowBtn,
+                          isLast && styles.reorderArrowBtnDisabled,
+                        ]}
+                        onPress={() => handleMoveDive(routine, idx, 1)}
+                        disabled={isLast || isReorderingThis}
+                        activeOpacity={0.6}
+                      >
+                        <Text
+                          style={[
+                            styles.reorderArrowText,
+                            isLast && styles.reorderArrowTextDisabled,
+                          ]}
+                        >
+                          ▼
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
                   <View style={styles.diveIndexCircle}>
                     <Text style={styles.diveIndexText}>{idx + 1}</Text>
                   </View>
@@ -940,6 +1079,140 @@ export default function RoutinesScreen() {
                 }}
               />
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Sortier-Modal ── */}
+      <Modal
+        visible={sortModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setSortModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Toast toast={toast} onDismiss={() => setToast(null)} />
+          <View style={[styles.modalSheet, styles.sortModalSheet]}>
+            <View style={styles.sortModalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>Sprünge sortieren</Text>
+                <Text style={styles.sortModalSub}>
+                  Routine #{sortModalRoutine?.index} {sortModalRoutine?.displayName ? `(${sortModalRoutine.displayName})` : ''}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.closeModalBtn}
+                onPress={() => setSortModalVisible(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.closeModalBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.sortSectionLabel}>Schnell-Sortierung</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.presetScroll}>
+              <View style={styles.presetRow}>
+                <TouchableOpacity
+                  style={styles.presetChip}
+                  onPress={() => handlePresetSort('group')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.presetChipText}>🏷️ Nach Gruppe</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.presetChip}
+                  onPress={() => handlePresetSort('ddAsc')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.presetChipText}>📈 DD aufsteigend</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.presetChip}
+                  onPress={() => handlePresetSort('ddDesc')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.presetChipText}>📉 DD absteigend</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.presetChip}
+                  onPress={() => handlePresetSort('code')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.presetChipText}>🔢 Nach Nummer</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+
+            <Text style={styles.sortSectionLabel}>Reihenfolge anpassen ({sortModalDives.length} Sprünge)</Text>
+            <ScrollView style={styles.sortModalList} showsVerticalScrollIndicator={true}>
+              {sortModalDives.map((de, idx) => {
+                const heightText = BACKEND_TO_HEIGHT[de.height] ?? de.height;
+                const posLabel = POSITION_NAMES[de.execution] ?? de.execution;
+                const groupName = DIVE_GROUP_NAMES[de.groupNumber]?.de ?? `Gr. ${de.groupNumber}`;
+                const isFirst = idx === 0;
+                const isLast = idx === sortModalDives.length - 1;
+
+                return (
+                  <View key={`${de.id}-${idx}`} style={styles.sortModalItem}>
+                    <View style={styles.sortModalItemIndex}>
+                      <Text style={styles.sortModalItemIndexText}>#{idx + 1}</Text>
+                    </View>
+                    <View style={styles.sortModalItemCode}>
+                      <Text style={styles.sortModalItemCodeText}>{de.diveCode}{de.execution}</Text>
+                    </View>
+                    <View style={styles.sortModalItemInfo}>
+                      <Text style={styles.sortModalItemName} numberOfLines={1}>
+                        {de.nameDe || de.nameEn || de.diveCode}
+                      </Text>
+                      <Text style={styles.sortModalItemMeta}>
+                        {heightText} · {posLabel} · DD {de.degreeOfDifficulty.toFixed(1)} · {groupName}
+                      </Text>
+                    </View>
+                    <View style={styles.sortModalItemActions}>
+                      <TouchableOpacity
+                        style={[styles.sortActionBtn, isFirst && styles.sortActionBtnDisabled]}
+                        onPress={() => handleModalMoveItem(idx, idx - 1)}
+                        disabled={isFirst}
+                        activeOpacity={0.6}
+                      >
+                        <Text style={styles.sortActionBtnText}>▲</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.sortActionBtn, isLast && styles.sortActionBtnDisabled]}
+                        onPress={() => handleModalMoveItem(idx, idx + 1)}
+                        disabled={isLast}
+                        activeOpacity={0.6}
+                      >
+                        <Text style={styles.sortActionBtnText}>▼</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })}
+            </ScrollView>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => setSortModalVisible(false)}
+                disabled={isSavingOrder}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.cancelBtnLabel}>Abbrechen</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.saveBtn, isSavingOrder && styles.saveBtnDisabled]}
+                onPress={handleSaveModalOrder}
+                disabled={isSavingOrder}
+                activeOpacity={0.8}
+              >
+                {isSavingOrder ? (
+                  <ActivityIndicator size="small" color={Colors.white} />
+                ) : (
+                  <Text style={styles.saveBtnLabel}>Reihenfolge speichern</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -1597,5 +1870,172 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontSize: 18,
     fontWeight: FontWeight.bold,
+  },
+
+  // Dive Reordering & Sort Styles
+  divesHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  sortInlineBtn: {
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+  },
+  sortInlineBtnText: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.semiBold,
+    color: Colors.primary,
+  },
+  reorderBtnCol: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: Spacing.xs,
+    gap: 1,
+  },
+  reorderArrowBtn: {
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+    backgroundColor: Colors.background,
+  },
+  reorderArrowBtnDisabled: {
+    opacity: 0.2,
+  },
+  reorderArrowText: {
+    fontSize: 9,
+    fontWeight: FontWeight.bold,
+    color: Colors.primary,
+  },
+  reorderArrowTextDisabled: {
+    color: Colors.textTertiary,
+  },
+  sortModalSheet: {
+    maxHeight: '85%',
+    paddingBottom: Spacing.xl,
+  },
+  sortModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.sm,
+  },
+  sortModalSub: {
+    fontSize: FontSize.sm,
+    color: Colors.textTertiary,
+    marginTop: 2,
+  },
+  sortSectionLabel: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.semiBold,
+    color: Colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.xs,
+  },
+  presetScroll: {
+    marginBottom: Spacing.sm,
+  },
+  presetRow: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+  },
+  presetChip: {
+    backgroundColor: Colors.primarySurface,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+  },
+  presetChipText: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.semiBold,
+    color: Colors.primary,
+  },
+  sortModalList: {
+    maxHeight: 340,
+    marginBottom: Spacing.sm,
+  },
+  sortModalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.background,
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.sm,
+    marginBottom: Spacing.xs,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+  },
+  sortModalItemIndex: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: Colors.primarySurface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: Spacing.sm,
+  },
+  sortModalItemIndexText: {
+    fontSize: 10,
+    fontWeight: FontWeight.bold,
+    color: Colors.primary,
+  },
+  sortModalItemCode: {
+    backgroundColor: Colors.white,
+    paddingHorizontal: Spacing.xs,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.xs,
+    marginRight: Spacing.sm,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  sortModalItemCodeText: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.bold,
+    color: Colors.textPrimary,
+  },
+  sortModalItemInfo: {
+    flex: 1,
+  },
+  sortModalItemName: {
+    fontSize: FontSize.xs,
+    color: Colors.textPrimary,
+    fontWeight: FontWeight.medium,
+  },
+  sortModalItemMeta: {
+    fontSize: 10,
+    color: Colors.textTertiary,
+    marginTop: 1,
+  },
+  sortModalItemActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    marginLeft: Spacing.xs,
+  },
+  sortActionBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 4,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sortActionBtnDisabled: {
+    opacity: 0.3,
+  },
+  sortActionBtnText: {
+    fontSize: 11,
+    fontWeight: FontWeight.bold,
+    color: Colors.textPrimary,
   },
 });
