@@ -306,11 +306,14 @@
       "allGroups": "All Groups",
       "onlyValidFilter": "Only valid dives",
       "onlyValidFilterCount": "Only valid dives ({{valid}}/{{total}})",
+      "onlyAthleteDivesFilter": "Athlete's Dives",
       "loadingCatalog": "Loading dive catalog...",
       "noDivesFound": "No matching dives found.",
       "noValidDivesFound": "No valid dives found for these filters. Turn off \"Only valid dives\" to view all.",
+      "noAthleteDivesFound": "No dives found for this athlete matching current filters.",
       "showAllBtn": "Show all dives",
-      "alreadyInRoutine": "In Routine"
+      "alreadyInRoutine": "In Routine",
+      "athleteDiveBadge": "Athlete"
     },
     "validationBadges": {
       "ROUTINE_DUPLICATE_DIVE_NUMBER": "In Routine",

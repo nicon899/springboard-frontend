@@ -24,6 +24,7 @@ import {
 } from '../constants/theme';
 import {
   api,
+  AthleteDiveStatusResponse,
   BACKEND_TO_HEIGHT,
   DiveExecutionResponse,
   RoutineResponse,
@@ -281,6 +282,8 @@ export default function RoutinesScreen() {
   const [selectedHeightFilter, setSelectedHeightFilter] = useState<string>('ALL');
   const [selectedGroupFilter, setSelectedGroupFilter] = useState<number | null>(null);
   const [onlyValidFilter, setOnlyValidFilter] = useState(false);
+  const [onlyAthleteDivesFilter, setOnlyAthleteDivesFilter] = useState(false);
+  const [athleteDiveExecutionIds, setAthleteDiveExecutionIds] = useState<Set<number>>(new Set());
   const [isAddingDiveId, setIsAddingDiveId] = useState<number | null>(null);
 
   // Delete confirmation states
@@ -305,12 +308,14 @@ export default function RoutinesScreen() {
     if (!targetUserId || !activeClubId) return;
     setIsLoading(true);
     try {
-      const [routineData, specData] = await Promise.all([
+      const [routineData, specData, athleteDivesData] = await Promise.all([
         api.getRoutinesByUser(targetUserId).catch(() => [] as RoutineResponse[]),
         api.getSpecificationsByClub(activeClubId).catch(() => [] as RoutineSpecificationResponse[]),
+        api.getAthleteDives(targetUserId).catch(() => [] as AthleteDiveStatusResponse[]),
       ]);
       setRoutines(routineData);
       setSpecs(specData);
+      setAthleteDiveExecutionIds(new Set(athleteDivesData.map((d) => d.diveExecutionId)));
     } catch (e) {
       console.warn('Failed to load routines:', e);
       showToast(getErrorMessage(e), 'error');
@@ -325,18 +330,26 @@ export default function RoutinesScreen() {
 
   // Load catalog dives executions
   const loadCatalog = useCallback(async () => {
-    if (catalogExecutions.length > 0) return;
+    if (catalogExecutions.length > 0 && athleteDiveExecutionIds.size > 0) return;
     setIsCatalogLoading(true);
     try {
-      const execs = await api.getAllDiveExecutions();
-      setCatalogExecutions(execs || []);
+      const [execs, athleteDives] = await Promise.all([
+        catalogExecutions.length > 0 ? Promise.resolve(catalogExecutions) : api.getAllDiveExecutions(),
+        athleteDiveExecutionIds.size > 0
+          ? Promise.resolve([] as AthleteDiveStatusResponse[])
+          : api.getAthleteDives(targetUserId).catch(() => [] as AthleteDiveStatusResponse[]),
+      ]);
+      if (catalogExecutions.length === 0) setCatalogExecutions(execs || []);
+      if (athleteDiveExecutionIds.size === 0 && athleteDives.length > 0) {
+        setAthleteDiveExecutionIds(new Set(athleteDives.map((d) => d.diveExecutionId)));
+      }
     } catch (e) {
       console.warn('Failed to load dive catalog:', e);
       showToast(getErrorMessage(e), 'error');
     } finally {
       setIsCatalogLoading(false);
     }
-  }, [catalogExecutions.length, getErrorMessage]);
+  }, [catalogExecutions.length, athleteDiveExecutionIds.size, targetUserId, getErrorMessage]);
 
   // ── Routine anlegen ──
   const handleCreate = async () => {
@@ -416,9 +429,7 @@ export default function RoutinesScreen() {
   const openAddDiveModal = (routine: RoutineResponse) => {
     setTargetRoutineForAdd(routine);
     setDiveSearchQuery('');
-    setSelectedHeightFilter('ALL');
     setSelectedGroupFilter(null);
-    setOnlyValidFilter(false);
     setAddDiveModalVisible(true);
     loadCatalog();
   };
@@ -577,9 +588,10 @@ export default function RoutinesScreen() {
   };
 
   // ── Match Counts (Valide vs. Gesamt für aktuelle Filter) ──
-  const { validCount, totalMatchingCount } = useMemo(() => {
+  const { validCount, totalMatchingCount, athleteMatchingCount } = useMemo(() => {
     let valid = 0;
     let total = 0;
+    let athlete = 0;
     const q = diveSearchQuery.trim().toLowerCase();
     const qClean = q.replace(/\s+/g, '');
 
@@ -610,18 +622,28 @@ export default function RoutinesScreen() {
         if (item.groupNumber !== selectedGroupFilter) continue;
       }
 
+      if (athleteDiveExecutionIds.has(item.id)) {
+        athlete++;
+      }
+
+      if (onlyAthleteDivesFilter && !athleteDiveExecutionIds.has(item.id)) {
+        continue;
+      }
+
       total++;
       if (validateDiveForRoutine(targetRoutineForAdd, item).isValid) {
         valid++;
       }
     }
 
-    return { validCount: valid, totalMatchingCount: total };
+    return { validCount: valid, totalMatchingCount: total, athleteMatchingCount: athlete };
   }, [
     catalogExecutions,
     diveSearchQuery,
     selectedHeightFilter,
     selectedGroupFilter,
+    onlyAthleteDivesFilter,
+    athleteDiveExecutionIds,
     targetRoutineForAdd,
     getPositionName,
   ]);
@@ -660,6 +682,11 @@ export default function RoutinesScreen() {
         if (item.groupNumber !== selectedGroupFilter) return false;
       }
 
+      // Sportler-Sprünge Filter (Status wird ignoriert)
+      if (onlyAthleteDivesFilter) {
+        if (!athleteDiveExecutionIds.has(item.id)) return false;
+      }
+
       // Valide-Filter
       if (onlyValidFilter) {
         const validation = validateDiveForRoutine(targetRoutineForAdd, item);
@@ -674,6 +701,8 @@ export default function RoutinesScreen() {
     selectedHeightFilter,
     selectedGroupFilter,
     onlyValidFilter,
+    onlyAthleteDivesFilter,
+    athleteDiveExecutionIds,
     targetRoutineForAdd,
     getPositionName,
   ]);
@@ -1283,25 +1312,45 @@ export default function RoutinesScreen() {
               </ScrollView>
             </View>
 
-            {/* Valide-Filter Toggle */}
+            {/* Filter-Toggles (Valide & Sportler-Sprünge) */}
             <View style={styles.validFilterSection}>
-              <TouchableOpacity
-                style={[styles.validFilterChip, onlyValidFilter && styles.validFilterChipActive]}
-                onPress={() => setOnlyValidFilter((v) => !v)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.validFilterChipIcon, onlyValidFilter && styles.validFilterChipIconActive]}>
-                  {onlyValidFilter ? '✓' : '⚡'}
-                </Text>
-                <Text style={[styles.validFilterChipText, onlyValidFilter && styles.validFilterChipTextActive]}>
-                  {t('routines.addDiveModal.onlyValidFilter', 'Nur valide Sprünge')}
-                </Text>
-                <View style={[styles.validCountPill, onlyValidFilter && styles.validCountPillActive]}>
-                  <Text style={[styles.validCountPillText, onlyValidFilter && styles.validCountPillTextActive]}>
-                    {validCount} / {totalMatchingCount}
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterTogglesRow}>
+                <TouchableOpacity
+                  style={[styles.validFilterChip, onlyValidFilter && styles.validFilterChipActive]}
+                  onPress={() => setOnlyValidFilter((v) => !v)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.validFilterChipIcon, onlyValidFilter && styles.validFilterChipIconActive]}>
+                    {onlyValidFilter ? '✓' : '⚡'}
                   </Text>
-                </View>
-              </TouchableOpacity>
+                  <Text style={[styles.validFilterChipText, onlyValidFilter && styles.validFilterChipTextActive]}>
+                    {t('routines.addDiveModal.onlyValidFilter', 'Nur valide Sprünge')}
+                  </Text>
+                  <View style={[styles.validCountPill, onlyValidFilter && styles.validCountPillActive]}>
+                    <Text style={[styles.validCountPillText, onlyValidFilter && styles.validCountPillTextActive]}>
+                      {validCount} / {totalMatchingCount}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.validFilterChip, onlyAthleteDivesFilter && styles.athleteFilterChipActive]}
+                  onPress={() => setOnlyAthleteDivesFilter((v) => !v)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.validFilterChipIcon, onlyAthleteDivesFilter && styles.athleteFilterChipIconActive]}>
+                    👤
+                  </Text>
+                  <Text style={[styles.validFilterChipText, onlyAthleteDivesFilter && styles.athleteFilterChipTextActive]}>
+                    {t('routines.addDiveModal.onlyAthleteDivesFilter', 'Sportler-Sprünge')}
+                  </Text>
+                  <View style={[styles.validCountPill, onlyAthleteDivesFilter && styles.athleteCountPillActive]}>
+                    <Text style={[styles.validCountPillText, onlyAthleteDivesFilter && styles.athleteCountPillTextActive]}>
+                      {athleteMatchingCount}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              </ScrollView>
             </View>
 
             {/* Trefferliste */}
@@ -1315,12 +1364,25 @@ export default function RoutinesScreen() {
                 <Text style={styles.emptyText}>
                   {onlyValidFilter && totalMatchingCount > 0
                     ? t('routines.addDiveModal.noValidDivesFound', 'Keine validen Sprünge für diese Filter gefunden. Deaktiviere „Nur valide Sprünge“, um alle zu sehen.')
+                    : onlyAthleteDivesFilter
+                    ? t('routines.addDiveModal.noAthleteDivesFound', 'Keine Sprünge des Sportlers für diese Filter gefunden.')
                     : t('routines.addDiveModal.noDivesFound', 'Keine passenden Sprünge gefunden.')}
                 </Text>
                 {onlyValidFilter && totalMatchingCount > 0 && (
                   <TouchableOpacity
                     style={styles.showAllDivesBtn}
                     onPress={() => setOnlyValidFilter(false)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.showAllDivesBtnText}>
+                      {t('routines.addDiveModal.showAllBtn', 'Alle Sprünge anzeigen')}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                {onlyAthleteDivesFilter && (
+                  <TouchableOpacity
+                    style={styles.showAllDivesBtn}
+                    onPress={() => setOnlyAthleteDivesFilter(false)}
                     activeOpacity={0.7}
                   >
                     <Text style={styles.showAllDivesBtnText}>
@@ -1340,6 +1402,7 @@ export default function RoutinesScreen() {
                   const posName = getPositionName(item.execution);
                   const isBeingAdded = isAddingDiveId === item.id;
                   const diveTitle = (i18n.language === 'en' ? (item.nameEn || item.nameDe) : (item.nameDe || item.nameEn)) || item.diveCode;
+                  const isAthleteDive = athleteDiveExecutionIds.has(item.id);
 
                   const validation = validateDiveForRoutine(targetRoutineForAdd, item);
                   const isInvalid = !validation.isValid;
@@ -1394,6 +1457,13 @@ export default function RoutinesScreen() {
                           <Text style={styles.catalogMetaGroup}>
                             {getGroupName(item.groupNumber)}
                           </Text>
+                          {isAthleteDive && (
+                            <View style={styles.athleteDiveBadge}>
+                              <Text style={styles.athleteDiveBadgeText}>
+                                👤 {t('routines.addDiveModal.athleteDiveBadge', 'Sportler')}
+                              </Text>
+                            </View>
+                          )}
                           {isInvalid && reasonBadge && (
                             <View
                               style={[
@@ -2313,6 +2383,37 @@ const styles = StyleSheet.create({
   validCountPillTextActive: {
     color: Colors.success,
     fontWeight: FontWeight.bold,
+  },
+  filterTogglesRow: {
+    gap: Spacing.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  athleteFilterChipActive: {
+    backgroundColor: Colors.primarySurface,
+    borderColor: Colors.primary,
+  },
+  athleteFilterChipIconActive: {
+    color: Colors.primary,
+  },
+  athleteCountPillActive: {
+    backgroundColor: Colors.white,
+    borderColor: Colors.primary,
+  },
+  athleteCountPillTextActive: {
+    color: Colors.primary,
+    fontWeight: FontWeight.bold,
+  },
+  athleteDiveBadge: {
+    backgroundColor: Colors.primarySurface,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: BorderRadius.xs,
+  },
+  athleteDiveBadgeText: {
+    fontSize: 10,
+    color: Colors.primary,
+    fontWeight: FontWeight.semiBold,
   },
 
   // Reason Badges on Catalog Items

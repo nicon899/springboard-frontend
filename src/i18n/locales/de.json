@@ -306,11 +306,14 @@
       "allGroups": "Alle Gruppen",
       "onlyValidFilter": "Nur valide Sprünge",
       "onlyValidFilterCount": "Nur valide Sprünge ({{valid}}/{{total}})",
+      "onlyAthleteDivesFilter": "Sportler-Sprünge",
       "loadingCatalog": "Lade Sprungkatalog…",
       "noDivesFound": "Keine passenden Sprünge gefunden.",
       "noValidDivesFound": "Keine validen Sprünge für diese Filter gefunden. Deaktiviere „Nur valide Sprünge“, um alle zu sehen.",
+      "noAthleteDivesFound": "Keine Sprünge des Sportlers für diese Filter gefunden.",
       "showAllBtn": "Alle Sprünge anzeigen",
-      "alreadyInRoutine": "Bereits in Routine"
+      "alreadyInRoutine": "Bereits in Routine",
+      "athleteDiveBadge": "Sportler"
     },
     "validationBadges": {
       "ROUTINE_DUPLICATE_DIVE_NUMBER": "In Routine",
