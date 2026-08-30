@@ -288,7 +288,9 @@
       "replaceDiveSuccess": "Sprung {{oldDive}} durch {{dive}} ersetzt",
       "removeDiveSuccess": "Sprung entfernt",
       "reorderSuccess": "Reihenfolge erfolgreich gespeichert",
-      "reorderRoutinesSuccess": "Reihenfolge der Routinen erfolgreich gespeichert"
+      "reorderRoutinesSuccess": "Reihenfolge der Routinen erfolgreich gespeichert",
+      "duplicateSuccess": "Routine „{{name}}“ erfolgreich dupliziert",
+      "duplicateSuccessOther": "Routine „{{name}}“ für {{athlete}} kopiert"
     },
     "createModal": {
       "title": "Neue Routine anlegen",
@@ -305,6 +307,19 @@
       "specLabel": "Serienspezifikation",
       "save": "Speichern",
       "saving": "Speichern…"
+    },
+    "duplicateModal": {
+      "title": "Routine duplizieren",
+      "subtitle": "Kopie von „{{name}}“ erstellen",
+      "targetOptionLabel": "Ziel-Sportler",
+      "targetSameAthlete": "Für diesen Sportler kopieren ({{name}})",
+      "targetOtherAthlete": "Für anderen Sportler kopieren",
+      "selectAthleteLabel": "Sportler auswählen",
+      "selectAthletePlaceholder": "Sportler wählen…",
+      "displayNameLabel": "Anzeigename der neuen Routine",
+      "displayNamePlaceholder": "z. B. Wettkampf Pflicht 2025 (Kopie)",
+      "duplicateBtn": "Duplizieren",
+      "duplicatingBtn": "Dupliziere…"
     },
     "addDiveModal": {
       "title": "Sprung hinzufügen",

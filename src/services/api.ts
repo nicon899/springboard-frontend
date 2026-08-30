@@ -281,6 +281,11 @@ export interface AddDiveToRoutineRequest {
   diveExecutionId: number;
 }
 
+export interface DuplicateRoutineRequest {
+  targetUserId?: number;
+  displayName?: string;
+}
+
 export interface LoginRequest {
   email: string;
   password: string;
@@ -731,6 +736,13 @@ export const api = {
 
   async deleteRoutine(id: number | string): Promise<void> {
     return request<void>(`/api/v1/routines/${id}`, { method: 'DELETE' });
+  },
+
+  async duplicateRoutine(id: number | string, payload?: DuplicateRoutineRequest): Promise<RoutineResponse> {
+    return request<RoutineResponse>(`/api/v1/routines/${id}/duplicate`, {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    });
   },
 
   async addDiveToRoutine(routineId: number | string, payload: AddDiveToRoutineRequest): Promise<RoutineResponse> {

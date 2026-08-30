@@ -284,7 +284,9 @@
       "replaceDiveSuccess": "Dive {{oldDive}} replaced by {{dive}}",
       "removeDiveSuccess": "Dive removed",
       "reorderSuccess": "Order saved successfully",
-      "reorderRoutinesSuccess": "Routine order saved successfully"
+      "reorderRoutinesSuccess": "Routine order saved successfully",
+      "duplicateSuccess": "Routine \"{{name}}\" duplicated successfully",
+      "duplicateSuccessOther": "Routine \"{{name}}\" copied for {{athlete}}"
     },
     "createModal": {
       "title": "Create New Routine",
@@ -301,6 +303,19 @@
       "specLabel": "Routine Specification",
       "saving": "Saving…",
       "save": "Save"
+    },
+    "duplicateModal": {
+      "title": "Duplicate Routine",
+      "subtitle": "Create copy of \"{{name}}\"",
+      "targetOptionLabel": "Target Athlete",
+      "targetSameAthlete": "Copy for this athlete ({{name}})",
+      "targetOtherAthlete": "Copy for another athlete",
+      "selectAthleteLabel": "Select Athlete",
+      "selectAthletePlaceholder": "Select athlete…",
+      "displayNameLabel": "Display name of new routine",
+      "displayNamePlaceholder": "e.g. Competition Compulsory 2025 (Copy)",
+      "duplicateBtn": "Duplicate",
+      "duplicatingBtn": "Duplicating…"
     },
     "addDiveModal": {
       "title": "Add Dive",

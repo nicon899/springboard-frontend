@@ -27,6 +27,7 @@ import {
   AthleteDiveStatusResponse,
   BACKEND_TO_HEIGHT,
   DiveExecutionResponse,
+  MembershipResponse,
   RoutineResponse,
   RoutineSpecificationResponse,
 } from '../../services/api';
@@ -340,6 +341,16 @@ export default function RoutinesScreen() {
   const [sortRoutinesModalList, setSortRoutinesModalList] = useState<RoutineResponse[]>([]);
   const [isSavingRoutinesOrder, setIsSavingRoutinesOrder] = useState(false);
 
+  // Duplicate Routine states
+  const [duplicateRoutineTarget, setDuplicateRoutineTarget] = useState<RoutineResponse | null>(null);
+  const [duplicateModalVisible, setDuplicateModalVisible] = useState(false);
+  const [duplicateTargetMode, setDuplicateTargetMode] = useState<'SAME' | 'OTHER'>('SAME');
+  const [selectedTargetUserId, setSelectedTargetUserId] = useState<number | null>(null);
+  const [duplicateDisplayName, setDuplicateDisplayName] = useState('');
+  const [isDuplicating, setIsDuplicating] = useState(false);
+  const [athletePickerOpen, setAthletePickerOpen] = useState(false);
+  const [clubMembers, setClubMembers] = useState<MembershipResponse[]>([]);
+
   // Expanded state per routine ID (default: false / collapsed)
   const [expandedRoutines, setExpandedRoutines] = useState<Record<number, boolean>>({});
 
@@ -355,16 +366,18 @@ export default function RoutinesScreen() {
     if (!targetUserId || !activeClubId) return;
     setIsLoading(true);
     try {
-      const [routineData, specData, athleteDivesData, userProfileData] = await Promise.all([
+      const [routineData, specData, athleteDivesData, userProfileData, membersData] = await Promise.all([
         api.getRoutinesByUser(targetUserId).catch(() => [] as RoutineResponse[]),
         api.getSpecificationsByClub(activeClubId).catch(() => [] as RoutineSpecificationResponse[]),
         api.getAthleteDives(targetUserId).catch(() => [] as AthleteDiveStatusResponse[]),
         targetUserId === user?.id ? Promise.resolve(user) : api.getUserById(targetUserId).catch(() => null),
+        api.getClubMembers(activeClubId).catch(() => [] as MembershipResponse[]),
       ]);
       setRoutines(routineData);
       setSpecs(specData);
       setAthleteDiveExecutionIds(new Set(athleteDivesData.map((d) => d.diveExecutionId)));
       setAthleteProfile(userProfileData);
+      setClubMembers(membersData);
     } catch (e) {
       console.warn('Failed to load routines:', e);
       showToast(getErrorMessage(e), 'error');
@@ -445,6 +458,59 @@ export default function RoutinesScreen() {
       showToast(getErrorMessage(e), 'error');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // ── Routine duplizieren ──
+  const openDuplicate = (routine: RoutineResponse) => {
+    setDuplicateRoutineTarget(routine);
+    setDuplicateTargetMode('SAME');
+    setSelectedTargetUserId(null);
+    const baseName = routine.displayName || getRoutineTitle(routine);
+    setDuplicateDisplayName(`${baseName} (Kopie)`);
+    setAthletePickerOpen(false);
+    setDuplicateModalVisible(true);
+  };
+
+  const handleDuplicate = async () => {
+    if (!duplicateRoutineTarget || !targetUserId) return;
+    const resolvedTargetUserId = duplicateTargetMode === 'SAME' ? targetUserId : selectedTargetUserId;
+    if (!resolvedTargetUserId) return;
+
+    setIsDuplicating(true);
+    try {
+      const res = await api.duplicateRoutine(duplicateRoutineTarget.id, {
+        targetUserId: Number(resolvedTargetUserId),
+        displayName: duplicateDisplayName.trim() || undefined,
+      });
+
+      setDuplicateModalVisible(false);
+
+      if (Number(resolvedTargetUserId) === Number(targetUserId)) {
+        showToast(
+          t('routines.toasts.duplicateSuccess', {
+            name: res.displayName || getRoutineTitle(res),
+            defaultValue: `Routine „${res.displayName || getRoutineTitle(res)}“ erfolgreich dupliziert`,
+          }),
+          'success'
+        );
+        await loadData();
+      } else {
+        const targetMember = clubMembers.find((m) => m.userId === Number(resolvedTargetUserId));
+        const targetName = targetMember?.userFullName || `#${resolvedTargetUserId}`;
+        showToast(
+          t('routines.toasts.duplicateSuccessOther', {
+            name: res.displayName || getRoutineTitle(res),
+            athlete: targetName,
+            defaultValue: `Routine „${res.displayName || getRoutineTitle(res)}“ für ${targetName} kopiert`,
+          }),
+          'success'
+        );
+      }
+    } catch (e: any) {
+      showToast(getErrorMessage(e), 'error');
+    } finally {
+      setIsDuplicating(false);
     }
   };
 
@@ -1039,6 +1105,13 @@ export default function RoutinesScreen() {
               <View style={styles.routineActions}>
                 <TouchableOpacity
                   style={styles.iconBtn}
+                  onPress={() => openDuplicate(routine)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.iconBtnText}>📑</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.iconBtn}
                   onPress={() => openEdit(routine)}
                   activeOpacity={0.7}
                 >
@@ -1396,6 +1469,7 @@ export default function RoutinesScreen() {
   const isAnyModalOpen =
     createModalVisible ||
     editModalVisible ||
+    duplicateModalVisible ||
     addDiveModalVisible ||
     sortModalVisible ||
     sortRoutinesModalVisible ||
@@ -1570,6 +1644,181 @@ export default function RoutinesScreen() {
               >
                 <Text style={styles.saveBtnLabel}>
                   {isSaving ? t('routines.editModal.saving', 'Speichern…') : t('routines.editModal.save', 'Speichern')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Duplizieren-Modal ── */}
+      <Modal
+        visible={duplicateModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setDuplicateModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Toast toast={toast} onDismiss={() => setToast(null)} />
+          <View style={styles.modalSheet}>
+            <View style={styles.duplicateModalHeader}>
+              <View style={{ flex: 1, marginRight: Spacing.sm }}>
+                <Text style={styles.modalTitle}>{t('routines.duplicateModal.title', 'Routine duplizieren')}</Text>
+                {duplicateRoutineTarget && (
+                  <Text style={styles.duplicateModalSub}>
+                    {t('routines.duplicateModal.subtitle', {
+                      name: getRoutineTitle(duplicateRoutineTarget),
+                      defaultValue: `Kopie von „${getRoutineTitle(duplicateRoutineTarget)}“ erstellen`,
+                    })}
+                  </Text>
+                )}
+              </View>
+              <TouchableOpacity
+                style={styles.closeModalBtn}
+                onPress={() => setDuplicateModalVisible(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.closeModalBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.fieldLabel}>{t('routines.duplicateModal.targetOptionLabel', 'Ziel-Sportler')}</Text>
+            
+            {/* Option 1: Für diesen Sportler kopieren */}
+            <TouchableOpacity
+              style={[
+                styles.duplicateOptionCard,
+                duplicateTargetMode === 'SAME' && styles.duplicateOptionCardActive,
+              ]}
+              onPress={() => {
+                setDuplicateTargetMode('SAME');
+                setAthletePickerOpen(false);
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.radioCircle, duplicateTargetMode === 'SAME' && styles.radioCircleActive]}>
+                {duplicateTargetMode === 'SAME' && <View style={styles.radioInnerCircle} />}
+              </View>
+              <View style={styles.duplicateOptionContent}>
+                <Text style={[styles.duplicateOptionTitle, duplicateTargetMode === 'SAME' && styles.duplicateOptionTitleActive]}>
+                  {t('routines.duplicateModal.targetSameAthlete', {
+                    name: athleteLabel,
+                    defaultValue: `Für diesen Sportler kopieren (${athleteLabel})`,
+                  })}
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Option 2: Für anderen Sportler kopieren */}
+            <TouchableOpacity
+              style={[
+                styles.duplicateOptionCard,
+                duplicateTargetMode === 'OTHER' && styles.duplicateOptionCardActive,
+              ]}
+              onPress={() => setDuplicateTargetMode('OTHER')}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.radioCircle, duplicateTargetMode === 'OTHER' && styles.radioCircleActive]}>
+                {duplicateTargetMode === 'OTHER' && <View style={styles.radioInnerCircle} />}
+              </View>
+              <View style={styles.duplicateOptionContent}>
+                <Text style={[styles.duplicateOptionTitle, duplicateTargetMode === 'OTHER' && styles.duplicateOptionTitleActive]}>
+                  {t('routines.duplicateModal.targetOtherAthlete', 'Für anderen Sportler kopieren')}
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Sportler-Auswahl (wenn Option 2 aktiv) */}
+            {duplicateTargetMode === 'OTHER' && (
+              <View style={styles.athleteSelectSection}>
+                <Text style={styles.subFieldLabel}>{t('routines.duplicateModal.selectAthleteLabel', 'Sportler auswählen')}</Text>
+                <TouchableOpacity
+                  style={[styles.dropdownBtn, { marginBottom: athletePickerOpen ? 0 : Spacing.md }]}
+                  onPress={() => setAthletePickerOpen((v) => !v)}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={
+                      selectedTargetUserId
+                        ? styles.dropdownBtnText
+                        : styles.dropdownBtnPlaceholder
+                    }
+                  >
+                    {selectedTargetUserId
+                      ? clubMembers.find((m) => m.userId === selectedTargetUserId)?.userFullName || `#${selectedTargetUserId}`
+                      : t('routines.duplicateModal.selectAthletePlaceholder', 'Sportler wählen…')}
+                  </Text>
+                  <Text style={styles.dropdownChevron}>{athletePickerOpen ? '▲' : '▼'}</Text>
+                </TouchableOpacity>
+
+                {athletePickerOpen && (
+                  <View style={[styles.dropdownList, { maxHeight: 180, marginBottom: Spacing.md }]}>
+                    <ScrollView nestedScrollEnabled style={{ maxHeight: 180 }}>
+                      {clubMembers
+                        .filter((m) => m.userId !== Number(targetUserId))
+                        .map((m) => (
+                          <TouchableOpacity
+                            key={m.userId}
+                            style={[
+                              styles.dropdownItem,
+                              selectedTargetUserId === m.userId && styles.dropdownItemActive,
+                            ]}
+                            onPress={() => {
+                              setSelectedTargetUserId(m.userId);
+                              setAthletePickerOpen(false);
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.dropdownItemText,
+                                selectedTargetUserId === m.userId && styles.dropdownItemTextActive,
+                              ]}
+                            >
+                              👤 {m.userFullName || m.userEmail}
+                            </Text>
+                            {m.clubRole && (
+                              <Text style={styles.dropdownItemMeta}>{m.clubRole}</Text>
+                            )}
+                          </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Anzeigename Eingabefeld */}
+            <Text style={styles.fieldLabel}>{t('routines.duplicateModal.displayNameLabel', 'Anzeigename der neuen Routine')}</Text>
+            <TextInput
+              style={[styles.dropdownBtn, { marginBottom: Spacing.md }]}
+              placeholder={t('routines.duplicateModal.displayNamePlaceholder', 'z. B. Wettkampf Pflicht 2025 (Kopie)')}
+              placeholderTextColor={Colors.textTertiary}
+              value={duplicateDisplayName}
+              onChangeText={setDuplicateDisplayName}
+            />
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => setDuplicateModalVisible(false)}
+                disabled={isDuplicating}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.cancelBtnLabel}>{t('common.cancel', 'Abbrechen')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.saveBtn,
+                  (isDuplicating || (duplicateTargetMode === 'OTHER' && !selectedTargetUserId)) && styles.saveBtnDisabled,
+                ]}
+                onPress={handleDuplicate}
+                disabled={isDuplicating || (duplicateTargetMode === 'OTHER' && !selectedTargetUserId)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.saveBtnLabel}>
+                  {isDuplicating
+                    ? t('routines.duplicateModal.duplicatingBtn', 'Dupliziere…')
+                    : t('routines.duplicateModal.duplicateBtn', 'Duplizieren')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -3310,5 +3559,73 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: FontWeight.bold,
     color: Colors.textPrimary,
+  },
+
+  // Duplicate Modal Styles
+  duplicateModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.sm,
+  },
+  duplicateModalSub: {
+    fontSize: FontSize.sm,
+    color: Colors.textTertiary,
+    marginTop: 2,
+  },
+  duplicateOptionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.background,
+    borderWidth: 1.5,
+    borderColor: Colors.borderLight,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    marginBottom: Spacing.sm,
+  },
+  duplicateOptionCardActive: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.primarySurface,
+  },
+  radioCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: Spacing.md,
+  },
+  radioCircleActive: {
+    borderColor: Colors.primary,
+  },
+  radioInnerCircle: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: Colors.primary,
+  },
+  duplicateOptionContent: {
+    flex: 1,
+  },
+  duplicateOptionTitle: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.medium,
+    color: Colors.textPrimary,
+  },
+  duplicateOptionTitleActive: {
+    fontWeight: FontWeight.bold,
+    color: Colors.primary,
+  },
+  athleteSelectSection: {
+    marginTop: Spacing.xs,
+    marginBottom: Spacing.sm,
+  },
+  subFieldLabel: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.semiBold,
+    color: Colors.textSecondary,
+    marginBottom: Spacing.xs,
   },
 });
