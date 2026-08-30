@@ -42,18 +42,6 @@ function CustomDrawerContent() {
 
   const items: (DrawerItem & { visible: boolean })[] = [
     {
-      route: '/(drawer)/dive-search',
-      labelKey: 'nav.diveSearch',
-      icon: '🔍',
-      visible: true,
-    },
-    {
-      route: '/(drawer)/auth',
-      labelKey: 'nav.auth',
-      icon: '🔐',
-      visible: !isLoggedIn,
-    },
-    {
       route: '/(drawer)/trainer',
       labelKey: 'nav.trainer',
       icon: '👨‍🏫',
@@ -64,6 +52,12 @@ function CustomDrawerContent() {
       labelKey: 'nav.trainingStatus',
       icon: '📋',
       visible: isLoggedIn,
+    },
+    {
+      route: '/(drawer)/dive-search',
+      labelKey: 'nav.diveSearch',
+      icon: '🔍',
+      visible: true,
     },
     {
       route: '/(drawer)/club',
@@ -77,6 +71,12 @@ function CustomDrawerContent() {
       icon: '👤',
       visible: isLoggedIn,
     },
+    {
+      route: '/(drawer)/auth',
+      labelKey: 'nav.auth',
+      icon: '🔐',
+      visible: !isLoggedIn,
+    },
   ];
 
   const visibleItems = items.filter((i) => i.visible);
@@ -84,7 +84,19 @@ function CustomDrawerContent() {
   return (
     <SafeAreaView style={styles.drawerSafe}>
       {/* App-Header */}
-      <View style={styles.drawerHeader}>
+      <TouchableOpacity
+        style={styles.drawerHeader}
+        activeOpacity={0.7}
+        onPress={() => {
+          if (!user) {
+            router.push('/(drawer)/auth');
+          } else if (trainerOrAdmin) {
+            router.push('/(drawer)/trainer');
+          } else {
+            router.push('/(drawer)/training-status');
+          }
+        }}
+      >
         <View style={styles.logoContainer}>
           <Text style={styles.logoIcon}>🏊</Text>
         </View>
@@ -101,7 +113,7 @@ function CustomDrawerContent() {
             )}
           </View>
         )}
-      </View>
+      </TouchableOpacity>
 
       <View style={styles.divider} />
 
@@ -157,6 +169,7 @@ export default function DrawerLayout() {
 
   return (
     <Drawer
+      initialRouteName="index"
       drawerContent={() => <CustomDrawerContent />}
       screenOptions={commonScreenOptions}
     >

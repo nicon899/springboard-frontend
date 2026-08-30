@@ -28,13 +28,20 @@ type FilterCategory = 'ALL' | 'YOUTH' | 'COMPETITIVE';
 
 export default function TrainerScreen() {
   const { t } = useTranslation();
-  const { activeClubMembership } = useAuth();
+  const { user, activeClubMembership, isTrainerOrAdmin } = useAuth();
   const router = useRouter();
 
   const [athletes, setAthletes] = useState<AthleteListItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<FilterCategory>('ALL');
+
+  useEffect(() => {
+    if (user && !isTrainerOrAdmin()) {
+      router.replace('/(drawer)/training-status');
+      return;
+    }
+  }, [user, isTrainerOrAdmin]);
 
   useEffect(() => {
     if (!activeClubMembership?.clubId) return;

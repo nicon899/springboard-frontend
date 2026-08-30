@@ -34,15 +34,15 @@ function AppGate() {
       return;
     }
 
-    // Eingeloggt und noch auf Auth-Screen → weiterleiten
-    if (currentScreen === 'auth' || !inDrawer) {
+    // Eingeloggt und noch auf Auth-Screen oder Index → weiterleiten
+    if (currentScreen === 'auth' || !inDrawer || !currentScreen || currentScreen === 'index') {
       if (isTrainerOrAdmin()) {
         router.replace('/(drawer)/trainer');
       } else {
         router.replace('/(drawer)/training-status');
       }
     }
-  }, [isLoading, user]);
+  }, [isLoading, user, isTrainerOrAdmin, segments]);
 
   if (isLoading) {
     return (
