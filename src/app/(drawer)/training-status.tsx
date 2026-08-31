@@ -40,6 +40,16 @@ import {
 const HEIGHTS: DiveHeight[] = ['1m', '3m', '5m', '7.5m', '10m'];
 const STATUSES: DiveStatus[] = ['PLANNED', 'LEARNING', 'MASTERED'];
 
+interface GroupedStatusDive {
+  key: string;
+  diveCode: string;
+  groupNumber: number;
+  nameDe: string;
+  nameEn: string;
+  status: DiveStatus;
+  entries: AthleteTrainingEntry[];
+}
+
 export default function TrainingStatusScreen() {
   const { t, i18n } = useTranslation();
   const { user, isTrainerOrAdmin } = useAuth();
@@ -175,17 +185,53 @@ export default function TrainingStatusScreen() {
     [entries, selectedHeight]
   );
 
-  // Gruppiert nach Status
-  const grouped = useMemo(() => {
-    const groups: Record<DiveStatus, AthleteTrainingEntry[]> = { PLANNED: [], LEARNING: [], MASTERED: [] };
-    currentEntries.forEach((e) => groups[e.status].push(e));
-    return groups;
-  }, [currentEntries]);
-
   const getDiveDefinition = useCallback(
     (code: string): DiveExecutionResponse | undefined => catalogExecutions.find((d) => d.diveCode === code),
     [catalogExecutions]
   );
+
+  // Gruppiert nach Status und fasst gleiche Sprungnummern zusammen
+  const groupedByStatus = useMemo(() => {
+    const result: Record<DiveStatus, GroupedStatusDive[]> = {
+      PLANNED: [],
+      LEARNING: [],
+      MASTERED: [],
+    };
+
+    const statusMaps: Record<DiveStatus, Map<string, GroupedStatusDive>> = {
+      PLANNED: new Map(),
+      LEARNING: new Map(),
+      MASTERED: new Map(),
+    };
+
+    currentEntries.forEach((entry) => {
+      const diveDef = getDiveDefinition(entry.diveCode);
+      let group = statusMaps[entry.status].get(entry.diveCode);
+      if (!group) {
+        group = {
+          key: `${entry.status}_${entry.diveCode}`,
+          diveCode: entry.diveCode,
+          groupNumber: diveDef?.groupNumber || 1,
+          nameDe: diveDef?.nameDe || entry.diveCode,
+          nameEn: diveDef?.nameEn || entry.diveCode,
+          status: entry.status,
+          entries: [],
+        };
+        statusMaps[entry.status].set(entry.diveCode, group);
+        result[entry.status].push(group);
+      }
+      group.entries.push(entry);
+    });
+
+    // Ausführungen innerhalb der Gruppe nach Position sortieren: A, B, C, D
+    for (const st of STATUSES) {
+      result[st].forEach((group) => {
+        group.entries.sort((a, b) => (a.execution || '').localeCompare(b.execution || ''));
+      });
+    }
+
+    return result;
+  }, [currentEntries, getDiveDefinition]);
 
   const handleStatusChange = async (status: DiveStatus, learnedAt?: string | null) => {
     const targetEntry = entries.find((e) => e.id === statusModal.entryId);
@@ -268,9 +314,7 @@ export default function TrainingStatusScreen() {
     .filter((e) => e.height === selectedHeight && e.diveExecutionId != null)
     .map((e) => e.diveExecutionId as number);
 
-  const renderEntry = (entry: AthleteTrainingEntry) => {
-    const dive = getDiveDefinition(entry.diveCode);
-    // DSGVO: Private Notizen für nicht-Trainer ausblenden
+  const renderNotes = (entry: AthleteTrainingEntry, showEmptyAddButton: boolean = true) => {
     const visibleNotes = isTrainer
       ? entry.notes
       : entry.notes.filter((n) => n.sharedWithAthlete);
@@ -290,6 +334,74 @@ export default function TrainingStatusScreen() {
         })
       : '';
 
+    if (!hasNotes && !showEmptyAddButton) {
+      return null;
+    }
+
+    return (
+      <>
+        {hasNotes && (
+          <View style={styles.notesSection}>
+            <TouchableOpacity
+              style={styles.notesToggleHeader}
+              onPress={() => toggleNotes(entry.id)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.notesToggleLeft}>
+                <Text style={styles.notesSectionTitle}>{t('trainingStatus.notes')}</Text>
+                <View style={styles.notesBadge}>
+                  <Text style={styles.notesBadgeText}>{visibleNotes.length}</Text>
+                </View>
+              </View>
+
+              <View style={styles.notesToggleRight}>
+                {!isExpanded && latestDateFormatted ? (
+                  <Text style={styles.notesLatestDate}>
+                    {t('trainingStatus.latestNote', { date: latestDateFormatted })}
+                  </Text>
+                ) : null}
+                <Text style={styles.notesToggleChevron}>{isExpanded ? '▲' : '▼'}</Text>
+              </View>
+            </TouchableOpacity>
+
+            {isExpanded && (
+              <View style={styles.notesList}>
+                {sortedNotes.map((note) => (
+                  <View key={note.id} style={styles.noteItem}>
+                    <View style={styles.noteHeader}>
+                      <Text style={styles.noteAuthor}>{t('trainingStatus.noteBy', { author: note.authorName })}</Text>
+                      <Text style={styles.noteDate}>
+                        {new Date(note.createdAt).toLocaleDateString(isDE ? 'de-DE' : 'en-US', { month: 'short', day: 'numeric' })}
+                      </Text>
+                      {!note.sharedWithAthlete && (
+                        <View style={styles.privateChip}>
+                          <Text style={styles.privateChipText}>🔒</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.noteText}>{note.text}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Trainer: Notiz hinzufügen Button */}
+        {isTrainer && (hasNotes || showEmptyAddButton) && (
+          <TouchableOpacity
+            style={styles.addNoteBtn}
+            onPress={() => setNoteModal({ visible: true, entryId: entry.id })}
+          >
+            <Text style={styles.addNoteBtnText}>+ {t('trainingStatus.addNote')}</Text>
+          </TouchableOpacity>
+        )}
+      </>
+    );
+  };
+
+  const renderSingleEntry = (entry: AthleteTrainingEntry) => {
+    const dive = getDiveDefinition(entry.diveCode);
     return (
       <View key={entry.id} style={styles.entryCard}>
         {/* Sprung-Header */}
@@ -358,63 +470,121 @@ export default function TrainingStatusScreen() {
           )}
         </View>
 
-        {/* Notizen (Einklappbar, Default: Eingeklappt) */}
-        {hasNotes && (
-          <View style={styles.notesSection}>
-            <TouchableOpacity
-              style={styles.notesToggleHeader}
-              onPress={() => toggleNotes(entry.id)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.notesToggleLeft}>
-                <Text style={styles.notesSectionTitle}>{t('trainingStatus.notes')}</Text>
-                <View style={styles.notesBadge}>
-                  <Text style={styles.notesBadgeText}>{visibleNotes.length}</Text>
-                </View>
-              </View>
+        {renderNotes(entry, true)}
+      </View>
+    );
+  };
 
-              <View style={styles.notesToggleRight}>
-                {!isExpanded && latestDateFormatted ? (
-                  <Text style={styles.notesLatestDate}>
-                    {t('trainingStatus.latestNote', { date: latestDateFormatted })}
-                  </Text>
-                ) : null}
-                <Text style={styles.notesToggleChevron}>{isExpanded ? '▲' : '▼'}</Text>
-              </View>
-            </TouchableOpacity>
+  const renderGroupedDive = (group: GroupedStatusDive) => {
+    if (group.entries.length === 1) {
+      return renderSingleEntry(group.entries[0]);
+    }
 
-            {isExpanded && (
-              <View style={styles.notesList}>
-                {sortedNotes.map((note) => (
-                  <View key={note.id} style={styles.noteItem}>
-                    <View style={styles.noteHeader}>
-                      <Text style={styles.noteAuthor}>{t('trainingStatus.noteBy', { author: note.authorName })}</Text>
-                      <Text style={styles.noteDate}>
-                        {new Date(note.createdAt).toLocaleDateString(isDE ? 'de-DE' : 'en-US', { month: 'short', day: 'numeric' })}
-                      </Text>
-                      {!note.sharedWithAthlete && (
-                        <View style={styles.privateChip}>
-                          <Text style={styles.privateChipText}>🔒</Text>
-                        </View>
-                      )}
-                    </View>
-                    <Text style={styles.noteText}>{note.text}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
+    const dive = getDiveDefinition(group.diveCode);
+    const groupName = DIVE_GROUP_NAMES[group.groupNumber]?.[isDE ? 'de' : 'en'];
+
+    return (
+      <View key={group.key} style={styles.entryCard}>
+        {/* Zusammengefasster Header für gleiche Sprungnummer */}
+        <View style={styles.multiGroupHeader}>
+          <View style={styles.codeChip}>
+            <Text style={styles.codeText}>{group.diveCode}</Text>
           </View>
-        )}
+          <View style={styles.entryTitle}>
+            <Text style={styles.diveName} numberOfLines={1}>
+              {dive ? (isDE ? dive.nameDe : dive.nameEn) : (isDE ? group.nameDe : group.nameEn)}
+            </Text>
+            <Text style={styles.groupName}>
+              {groupName ? `${groupName} • ` : ''}
+              {group.entries.length} {isDE ? 'Ausführungen' : 'executions'}
+            </Text>
+          </View>
+        </View>
 
-        {/* Trainer: Notiz hinzufügen Button */}
-        {isTrainer && (
-          <TouchableOpacity
-            style={styles.addNoteBtn}
-            onPress={() => setNoteModal({ visible: true, entryId: entry.id })}
-          >
-            <Text style={styles.addNoteBtnText}>+ {t('trainingStatus.addNote')}</Text>
-          </TouchableOpacity>
-        )}
+        {/* Einzelne Ausführungen dieses Sprungs */}
+        <View style={styles.groupedExecutionsWrapper}>
+          {group.entries.map((entry, idx) => {
+            const isLast = idx === group.entries.length - 1;
+            const visibleNotes = isTrainer
+              ? entry.notes
+              : entry.notes.filter((n) => n.sharedWithAthlete);
+            const hasNotes = visibleNotes.length > 0;
+
+            return (
+              <View
+                key={entry.id}
+                style={[
+                  styles.groupedExecRow,
+                  !isLast && styles.groupedExecRowBorder,
+                ]}
+              >
+                <View style={styles.groupedExecHeader}>
+                  <View style={styles.groupedExecLeft}>
+                    <View style={styles.posCodeBadge}>
+                      <Text style={styles.posCodeBadgeText}>
+                        {entry.execution || ''}
+                      </Text>
+                    </View>
+                    <View style={styles.groupedExecMetaCol}>
+                      <View style={styles.groupedExecMetaRow}>
+                        <Text style={styles.groupedExecPosName}>
+                          {getPositionName(entry.execution)}
+                        </Text>
+                        {entry.degreeOfDifficulty != null && (
+                          <>
+                            <Text style={styles.subtitleSeparator}>•</Text>
+                            <Text style={styles.ddMetaText}>
+                              DD {entry.degreeOfDifficulty.toFixed(1)}
+                            </Text>
+                          </>
+                        )}
+                        {!hasNotes && isTrainer && (
+                          <TouchableOpacity
+                            onPress={() => setNoteModal({ visible: true, entryId: entry.id })}
+                            style={styles.inlineAddNoteBtn}
+                            activeOpacity={0.6}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          >
+                            <Text style={styles.inlineAddNoteIcon}>📝</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                      {entry.status === 'MASTERED' && entry.learnedAt ? (
+                        <Text style={styles.learnedDateSmall}>
+                          {t('trainingStatus.learnedAt', {
+                            date: formatLearnedDate(entry.learnedAt),
+                            defaultValue: `Gelernt am ${formatLearnedDate(entry.learnedAt)}`,
+                          })}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+
+                  {isTrainer ? (
+                    <TouchableOpacity
+                      onPress={() =>
+                        setStatusModal({
+                          visible: true,
+                          entryId: entry.id,
+                          current: entry.status,
+                          diveExecutionId: entry.diveExecutionId,
+                          learnedAt: entry.learnedAt,
+                        })
+                      }
+                      activeOpacity={0.7}
+                    >
+                      <StatusBadge status={entry.status} size="sm" />
+                    </TouchableOpacity>
+                  ) : (
+                    <StatusBadge status={entry.status} size="sm" />
+                  )}
+                </View>
+
+                {renderNotes(entry, false)}
+              </View>
+            );
+          })}
+        </View>
       </View>
     );
   };
@@ -480,13 +650,13 @@ export default function TrainingStatusScreen() {
       {/* Sprung-Listen (nach Status gruppiert) */}
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {STATUSES.map((status) => {
-          const group = grouped[status];
-          if (group.length === 0) return null;
+          const groupList = groupedByStatus[status];
+          if (groupList.length === 0) return null;
           const statusLabelKey = `trainingStatus.status${status.charAt(0) + status.slice(1).toLowerCase()}` as any;
           return (
             <View key={status}>
               <Text style={styles.sectionHeader}>{t(statusLabelKey)}</Text>
-              {group.map(renderEntry)}
+              {groupList.map(renderGroupedDive)}
             </View>
           );
         })}
@@ -923,5 +1093,75 @@ const styles = StyleSheet.create({
     fontSize: FontSize.md,
     fontWeight: FontWeight.semiBold,
     color: Colors.white,
+  },
+
+  // ── Zusammengefasste Sprünge (gleiche Nummer, mehrere Ausführungen) ──
+  multiGroupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.xs,
+  },
+  groupedExecutionsWrapper: {
+    borderTopWidth: 1,
+    borderTopColor: Colors.borderLight,
+    paddingTop: 2,
+  },
+  groupedExecRow: {
+    paddingVertical: Spacing.sm,
+  },
+  groupedExecRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+  },
+  groupedExecHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  groupedExecLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: Spacing.sm,
+  },
+  posCodeBadge: {
+    backgroundColor: Colors.primarySurface,
+    borderRadius: BorderRadius.xs,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 3,
+    minWidth: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  posCodeBadgeText: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.bold,
+    color: Colors.primary,
+  },
+  groupedExecMetaCol: {
+    flex: 1,
+  },
+  groupedExecMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flexWrap: 'wrap',
+  },
+  groupedExecPosName: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semiBold,
+    color: Colors.textPrimary,
+  },
+  inlineAddNoteBtn: {
+    marginLeft: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: BorderRadius.xs,
+    backgroundColor: Colors.primarySurface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inlineAddNoteIcon: {
+    fontSize: 12,
   },
 });
