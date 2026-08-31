@@ -578,10 +578,10 @@ export default function TrainingStatusScreen() {
                       }
                       activeOpacity={0.7}
                     >
-                      <StatusBadge status={entry.status} size="sm" />
+                      <StatusBadge status={entry.status} />
                     </TouchableOpacity>
                   ) : (
-                    <StatusBadge status={entry.status} size="sm" />
+                    <StatusBadge status={entry.status} />
                   )}
                 </View>
 
