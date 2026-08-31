@@ -28,7 +28,7 @@
     "trainingStatus": "Trainingsstand",
     "club": "Verein",
     "routineSpecifications": "Serienspezifikationen",
-    "routines": "Routinen",
+    "routines": "Serien",
     "ageCategories": "Altersklassen",
     "profile": "Profil"
   },
@@ -110,9 +110,9 @@
     "selectDive": "Sprung aus Katalog wählen",
     "noCatalogDives": "Keine weiteren Sprünge für diese Höhe im Katalog.",
     "addToTrainer": "Zum Trainingsplan hinzufügen",
-    "routinesBannerTitle": "Routinen (Serien)",
-    "routinesBannerSub": "{{count}} Routine vorhanden",
-    "routinesBannerSub_other": "{{count}} Routinen vorhanden"
+    "routinesBannerTitle": "Serien",
+    "routinesBannerSub": "{{count}} Serie vorhanden",
+    "routinesBannerSub_other": "{{count}} Serie vorhanden"
   },
   "diveSearch": {
     "title": "Sprungsuche",
@@ -226,15 +226,15 @@
     }
   },
   "routines": {
-    "title": "Routinen",
-    "routineCount_one": "{{count}} Routine",
-    "routineCount_other": "{{count}} Routinen",
-    "newRoutineBtn": "+ Neue Routine",
-    "loading": "Lade Routinen…",
-    "noRoutinesTitle": "Keine Routinen",
-    "emptyTextCanEdit": "Lege eine neue Routine an.",
-    "emptyText": "Es sind noch keine Routinen vorhanden.",
-    "defaultRoutineTitle": "Routine",
+    "title": "Serien",
+    "routineCount_one": "{{count}} Serie",
+    "routineCount_other": "{{count}} Serien",
+    "newRoutineBtn": "+ Neue Serie",
+    "loading": "Lade Serien…",
+    "noRoutinesTitle": "Keine Serien",
+    "emptyTextCanEdit": "Lege eine neue Serie an.",
+    "emptyText": "Es sind noch keine Serien vorhanden.",
+    "defaultRoutineTitle": "Serie",
     "diveCount": "{{count}} Sprung",
     "diveCount_other": "{{count}} Sprünge",
     "maxDivesAllowed": "max. {{max}} erlaubt",
@@ -260,11 +260,11 @@
     "incompleteBannerText_other": "Serie unvollständig: Noch {{count}} Sprünge erforderlich ({{current}}/{{required}} vorhanden).",
     "ageCategoryMismatchBadge": "AK unpassend ({{category}})",
     "ageCategoryMismatchBanner": "Altersklasse unpassend: „{{category}}“ ({{range}}) passt nicht zum Alter des Sportlers ({{athleteAge}} Jahre).",
-    "divesSectionTitle": "Sprünge in dieser Routine",
+    "divesSectionTitle": "Sprünge in dieser Serie",
     "sortBtn": "⇅ Sortieren",
-    "sortRoutinesBtn": "⇅ Routinen sortieren",
+    "sortRoutinesBtn": "⇅ Serien sortieren",
     "addDiveBtn": "+ Sprung hinzufügen",
-    "noDivesText": "Noch keine Sprünge in dieser Routine.",
+    "noDivesText": "Noch keine Sprünge in dieser Serie.",
     "addFirstDiveBtn": "+ Ersten Sprung hinzufügen",
     "positions": {
       "A": "Gestreckt",
@@ -283,19 +283,19 @@
       "createSpecLink": "＋ Neue Spezifikation anlegen"
     },
     "toasts": {
-      "createSuccess": "Routine erfolgreich angelegt",
-      "updateSuccess": "Routine aktualisiert",
-      "deleteSuccess": "Routine „{{name}}“ gelöscht",
+      "createSuccess": "Serie erfolgreich angelegt",
+      "updateSuccess": "Serie aktualisiert",
+      "deleteSuccess": "Serie „{{name}}“ gelöscht",
       "addDiveSuccess": "Sprung {{dive}} hinzugefügt",
       "replaceDiveSuccess": "Sprung {{oldDive}} durch {{dive}} ersetzt",
       "removeDiveSuccess": "Sprung entfernt",
       "reorderSuccess": "Reihenfolge erfolgreich gespeichert",
-      "reorderRoutinesSuccess": "Reihenfolge der Routinen erfolgreich gespeichert",
-      "duplicateSuccess": "Routine „{{name}}“ erfolgreich dupliziert",
-      "duplicateSuccessOther": "Routine „{{name}}“ für {{athlete}} kopiert"
+      "reorderRoutinesSuccess": "Reihenfolge der Serien erfolgreich gespeichert",
+      "duplicateSuccess": "Serie „{{name}}“ erfolgreich dupliziert",
+      "duplicateSuccessOther": "Serie „{{name}}“ für {{athlete}} kopiert"
     },
     "createModal": {
-      "title": "Neue Routine anlegen",
+      "title": "Neue Serie anlegen",
       "displayNameLabel": "Anzeigename (optional)",
       "displayNamePlaceholder": "z. B. Wettkampf Pflicht 2025",
       "specLabel": "Serienspezifikation (optional)",
@@ -303,7 +303,7 @@
       "creating": "Anlegen…"
     },
     "editModal": {
-      "title": "Routine bearbeiten",
+      "title": "Serie bearbeiten",
       "displayNameLabel": "Anzeigename",
       "displayNamePlaceholder": "z. B. Wettkampf Pflicht 2025",
       "specLabel": "Serienspezifikation",
@@ -311,14 +311,14 @@
       "saving": "Speichern…"
     },
     "duplicateModal": {
-      "title": "Routine duplizieren",
+      "title": "Serie duplizieren",
       "subtitle": "Kopie von „{{name}}“ erstellen",
       "targetOptionLabel": "Ziel-Sportler",
       "targetSameAthlete": "Für diesen Sportler kopieren ({{name}})",
       "targetOtherAthlete": "Für anderen Sportler kopieren",
       "selectAthleteLabel": "Sportler auswählen",
       "selectAthletePlaceholder": "Sportler wählen…",
-      "displayNameLabel": "Anzeigename der neuen Routine",
+      "displayNameLabel": "Anzeigename der neuen Serie",
       "displayNamePlaceholder": "z. B. Wettkampf Pflicht 2025 (Kopie)",
       "duplicateBtn": "Duplizieren",
       "duplicatingBtn": "Dupliziere…"
@@ -345,7 +345,7 @@
       "subtitle": "Ersetzt „{{oldDive}}“ in {{name}}"
     },
     "validationBadges": {
-      "ROUTINE_DUPLICATE_DIVE_NUMBER": "In Routine",
+      "ROUTINE_DUPLICATE_DIVE_NUMBER": "In Serie",
       "ROUTINE_MAX_DIVES_EXCEEDED": "Max. Sprünge",
       "ROUTINE_JUNIOR_TABLE_NOT_ALLOWED": "Nachwuchstabelle",
       "ROUTINE_MAX_DIFFICULTY_EXCEEDED": "SKG zu hoch",
@@ -364,8 +364,8 @@
       "saveOrder": "Reihenfolge speichern"
     },
     "sortRoutinesModal": {
-      "title": "Routinen sortieren",
-      "subtitle": "Reihenfolge der Routinen von {{name}}",
+      "title": "Serien sortieren",
+      "subtitle": "Reihenfolge der Serien von {{name}}",
       "quickSort": "Schnell-Sortierung",
       "presetCreatedDesc": "🕒 Erstellung (neueste)",
       "presetCreatedAsc": "🕒 Erstellung (älteste)",
@@ -376,13 +376,13 @@
       "presetDivesAsc": "🔢 Wenigste Sprünge",
       "presetDdDesc": "📈 Höchste SKG",
       "presetDdAsc": "📉 Niedrigste SKG",
-      "customOrder": "Reihenfolge anpassen ({{count}} Routinen)",
-      "customOrder_one": "Reihenfolge anpassen ({{count}} Routine)",
+      "customOrder": "Reihenfolge anpassen ({{count}} Serien)",
+      "customOrder_one": "Reihenfolge anpassen ({{count}} Serie)",
       "saveOrder": "Reihenfolge speichern"
     },
     "deleteModal": {
-      "title": "Routine löschen",
-      "message": "Möchtest du die Routine „{{name}}“ wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden."
+      "title": "Serie löschen",
+      "message": "Möchtest du die Serie „{{name}}“ wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden."
     },
     "removeDiveModal": {
       "title": "Sprung entfernen",
@@ -390,7 +390,7 @@
       "confirmBtn": "Entfernen"
     },
     "errors": {
-      "ROUTINE_DUPLICATE_DIVE_NUMBER": "Sprungnummer {{diveCode}} ist bereits in dieser Routine vorhanden (jede Sprungnummer darf nur einmal vorkommen).",
+      "ROUTINE_DUPLICATE_DIVE_NUMBER": "Sprungnummer {{diveCode}} ist bereits in dieser Serie vorhanden (jede Sprungnummer darf nur einmal vorkommen).",
       "ROUTINE_MAX_DIVES_EXCEEDED": "Die maximale Anzahl von {{numberOfDives}} Sprüngen für diese Serie ist bereits erreicht.",
       "ROUTINE_JUNIOR_TABLE_NOT_ALLOWED": "Sprung {{diveCode}} ist aus der Nachwuchstabelle und für diese Serie nicht erlaubt.",
       "ROUTINE_MAX_DIFFICULTY_EXCEEDED": "Maximaler Schwierigkeitsgrad von {{maxDifficulty}} würde überschritten (aktuell: {{currentDifficulty}}, neu: {{newDifficulty}}).",
