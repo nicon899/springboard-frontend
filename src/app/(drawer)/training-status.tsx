@@ -64,10 +64,12 @@ export default function TrainingStatusScreen() {
     entryId: string;
     diveExecutionId?: number;
     current: DiveStatus;
+    learnedAt?: string | null;
   }>({
     visible: false,
     entryId: '',
     current: 'PLANNED',
+    learnedAt: null,
   });
   const [addDiveModal, setAddDiveModal] = useState(false);
   const [noteModal, setNoteModal] = useState<{ visible: boolean; entryId: string }>({ visible: false, entryId: '' });
@@ -83,6 +85,19 @@ export default function TrainingStatusScreen() {
   };
 
   const isDE = i18n.language === 'de';
+
+  const formatLearnedDate = (isoDate: string) => {
+    try {
+      const parts = isoDate.split('-');
+      if (parts.length === 3) {
+        const [year, month, day] = parts;
+        return isDE ? `${day}.${month}.${year}` : `${year}-${month}-${day}`;
+      }
+      return new Date(isoDate).toLocaleDateString(isDE ? 'de-DE' : 'en-US');
+    } catch {
+      return isoDate;
+    }
+  };
 
   // Load catalog executions & athlete dives from API
   const loadData = useCallback(async () => {
@@ -118,6 +133,7 @@ export default function TrainingStatusScreen() {
           diveExecutionId: d.diveExecutionId,
           height: BACKEND_TO_HEIGHT[d.height] || '1m',
           status: d.status,
+          learnedAt: d.learnedAt ?? null,
           notes: diveNotes,
           addedAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -154,7 +170,7 @@ export default function TrainingStatusScreen() {
     [catalogExecutions]
   );
 
-  const handleStatusChange = async (status: DiveStatus) => {
+  const handleStatusChange = async (status: DiveStatus, learnedAt?: string | null) => {
     const targetEntry = entries.find((e) => e.id === statusModal.entryId);
     if (!targetEntry || !targetAthleteId) return;
 
@@ -171,6 +187,7 @@ export default function TrainingStatusScreen() {
       await api.updateAthleteDive(targetAthleteId, {
         diveExecutionId,
         status,
+        learnedAt: status === 'MASTERED' ? learnedAt : null,
       });
       await loadData();
     } catch (e: any) {
@@ -261,15 +278,36 @@ export default function TrainingStatusScreen() {
             <Text style={styles.diveName} numberOfLines={1}>
               {dive ? (isDE ? dive.nameDe : dive.nameEn) : entry.diveCode}
             </Text>
-            {dive && (
-              <Text style={styles.groupName}>
-                {DIVE_GROUP_NAMES[dive.groupNumber]?.[isDE ? 'de' : 'en']}
-              </Text>
-            )}
+            <View style={styles.entrySubtitleRow}>
+              {dive && (
+                <Text style={styles.groupName}>
+                  {DIVE_GROUP_NAMES[dive.groupNumber]?.[isDE ? 'de' : 'en']}
+                </Text>
+              )}
+              {entry.status === 'MASTERED' && entry.learnedAt ? (
+                <>
+                  {dive && <Text style={styles.subtitleSeparator}>•</Text>}
+                  <Text style={styles.learnedDateSmall}>
+                    {t('trainingStatus.learnedAt', {
+                      date: formatLearnedDate(entry.learnedAt),
+                      defaultValue: `Gelernt am ${formatLearnedDate(entry.learnedAt)}`,
+                    })}
+                  </Text>
+                </>
+              ) : null}
+            </View>
           </View>
           {isTrainer ? (
             <TouchableOpacity
-              onPress={() => setStatusModal({ visible: true, entryId: entry.id, current: entry.status })}
+              onPress={() =>
+                setStatusModal({
+                  visible: true,
+                  entryId: entry.id,
+                  current: entry.status,
+                  diveExecutionId: entry.diveExecutionId,
+                  learnedAt: entry.learnedAt,
+                })
+              }
               activeOpacity={0.7}
             >
               <StatusBadge status={entry.status} />
@@ -433,6 +471,7 @@ export default function TrainingStatusScreen() {
       <StatusChangeModal
         visible={statusModal.visible}
         currentStatus={statusModal.current}
+        currentLearnedAt={statusModal.learnedAt}
         onSelect={handleStatusChange}
         onClose={() => setStatusModal((s) => ({ ...s, visible: false }))}
       />
@@ -604,10 +643,25 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.semiBold,
     color: Colors.textPrimary,
   },
+  entrySubtitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginTop: 2,
+    gap: 4,
+  },
   groupName: {
     fontSize: FontSize.xs,
     color: Colors.textTertiary,
-    marginTop: 1,
+  },
+  subtitleSeparator: {
+    fontSize: FontSize.xs,
+    color: Colors.textTertiary,
+  },
+  learnedDateSmall: {
+    fontSize: FontSize.xs,
+    color: Colors.statusMastered,
+    fontWeight: FontWeight.medium,
   },
   notesSection: {
     marginTop: Spacing.sm,

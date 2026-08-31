@@ -40,8 +40,10 @@ export interface AthleteTrainingEntry {
     id: string;
     athleteId: string;
     diveCode: string;
+    diveExecutionId?: number;
     height: DiveHeight;
     status: DiveStatus;
+    learnedAt?: string | null;
     notes: TrainerNote[];
     addedAt: string; // ISO 8601
     updatedAt: string;

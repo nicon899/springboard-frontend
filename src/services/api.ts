@@ -160,11 +160,13 @@ export interface AthleteDiveStatusResponse {
   degreeOfDifficulty: number;
   height: BackendHeight;
   status: 'PLANNED' | 'LEARNING' | 'MASTERED';
+  learnedAt?: string | null;
 }
 
 export interface UpdateDiveStatusRequest {
   diveExecutionId: number;
   status: 'PLANNED' | 'LEARNING' | 'MASTERED';
+  learnedAt?: string | null;
 }
 
 export interface CommentResponse {

@@ -112,7 +112,10 @@
     "addToTrainer": "Zum Trainingsplan hinzufügen",
     "routinesBannerTitle": "Serien",
     "routinesBannerSub": "{{count}} Serie vorhanden",
-    "routinesBannerSub_other": "{{count}} Serie vorhanden"
+    "routinesBannerSub_other": "{{count}} Serie vorhanden",
+    "learnedAt": "Gelernt am {{date}}",
+    "learnedDate": "Datum (Gelernt am)",
+    "today": "Heute"
   },
   "diveSearch": {
     "title": "Sprungsuche",

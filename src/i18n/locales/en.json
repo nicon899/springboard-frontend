@@ -112,7 +112,10 @@
     "addToTrainer": "Add to training plan",
     "routinesBannerTitle": "Routines (Series)",
     "routinesBannerSub": "{{count}} routine available",
-    "routinesBannerSub_other": "{{count}} routines available"
+    "routinesBannerSub_other": "{{count}} routines available",
+    "learnedAt": "Mastered on {{date}}",
+    "learnedDate": "Date Mastered",
+    "today": "Today"
   },
   "diveSearch": {
     "title": "Dive Search",

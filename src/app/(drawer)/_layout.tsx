@@ -1,6 +1,6 @@
 import React from 'react';
 import { Drawer } from 'expo-router/drawer';
-import { useRouter, usePathname } from 'expo-router';
+import { useRouter, usePathname, useNavigation } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import {
   SafeAreaView,
@@ -148,6 +148,43 @@ function CustomDrawerContent() {
 }
 
 // ────────────────────────────────────────────────────────────
+// Header Back-Button für Unterseiten
+// ────────────────────────────────────────────────────────────
+function HeaderBackButton({
+  tintColor = Colors.textOnPrimary,
+  fallbackRoute = '/(drawer)/trainer',
+}: {
+  tintColor?: string;
+  fallbackRoute?: string;
+}) {
+  const router = useRouter();
+  const navigation = useNavigation<any>();
+
+  const handleBack = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace(fallbackRoute as any);
+    }
+  };
+
+  return (
+    <TouchableOpacity
+      style={styles.headerBackButton}
+      onPress={handleBack}
+      activeOpacity={0.7}
+      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+      accessibilityRole="button"
+      accessibilityLabel="Zurück"
+    >
+      <Text style={[styles.headerBackIcon, { color: tintColor }]}>←</Text>
+    </TouchableOpacity>
+  );
+}
+
+// ────────────────────────────────────────────────────────────
 // Drawer Layout
 // ────────────────────────────────────────────────────────────
 export default function DrawerLayout() {
@@ -170,6 +207,7 @@ export default function DrawerLayout() {
   return (
     <Drawer
       initialRouteName="index"
+      backBehavior="history"
       drawerContent={() => <CustomDrawerContent />}
       screenOptions={commonScreenOptions}
     >
@@ -217,13 +255,25 @@ export default function DrawerLayout() {
         options={{
           title: t('nav.routineSpecifications', 'Serienspezifikationen'),
           drawerItemStyle: styles.hidden,
+          headerLeft: ({ tintColor }) => (
+            <HeaderBackButton
+              tintColor={tintColor}
+              fallbackRoute="/(drawer)/routines"
+            />
+          ),
         }}
       />
       <Drawer.Screen
         name="routines"
         options={{
-          title: t('nav.routines', 'Routinen'),
+          title: t('nav.routines', 'Serien'),
           drawerItemStyle: styles.hidden,
+          headerLeft: ({ tintColor }) => (
+            <HeaderBackButton
+              tintColor={tintColor}
+              fallbackRoute="/(drawer)/trainer"
+            />
+          ),
         }}
       />
       <Drawer.Screen
@@ -231,6 +281,12 @@ export default function DrawerLayout() {
         options={{
           title: t('nav.ageCategories', 'Altersklassen'),
           drawerItemStyle: styles.hidden,
+          headerLeft: ({ tintColor }) => (
+            <HeaderBackButton
+              tintColor={tintColor}
+              fallbackRoute="/(drawer)/club"
+            />
+          ),
         }}
       />
       <Drawer.Screen
@@ -324,5 +380,18 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xs,
     color: Colors.drawerIcon,
     textAlign: 'center',
+  },
+  // ── Header Back Button ──
+  headerBackButton: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: Spacing.xs,
+  },
+  headerBackIcon: {
+    fontSize: 24,
+    fontWeight: FontWeight.bold,
+    lineHeight: 28,
   },
 });
