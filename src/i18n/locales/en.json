@@ -115,7 +115,15 @@
     "routinesBannerSub_other": "{{count}} routines available",
     "learnedAt": "Mastered on {{date}}",
     "learnedDate": "Date Mastered",
-    "today": "Today"
+    "today": "Today",
+    "heightLabel": "Height",
+    "multiAdd": "Add multiple dives",
+    "statusToAdd": "Status",
+    "multiSelect": "Select multiple",
+    "addSelectedDives": "Add {{count}} dive",
+    "addSelectedDives_other": "Add {{count}} dives",
+    "selectedCount": "{{count}} selected",
+    "selectedCount_other": "{{count}} selected"
   },
   "diveSearch": {
     "title": "Dive Search",

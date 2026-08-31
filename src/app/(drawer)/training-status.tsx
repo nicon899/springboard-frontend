@@ -130,6 +130,8 @@ export default function TrainingStatusScreen() {
           id: String(d.id),
           athleteId: String(d.athleteId),
           diveCode: d.diveCode,
+          execution: d.execution,
+          degreeOfDifficulty: d.degreeOfDifficulty,
           diveExecutionId: d.diveExecutionId,
           height: BACKEND_TO_HEIGHT[d.height] || '1m',
           status: d.status,
@@ -151,6 +153,21 @@ export default function TrainingStatusScreen() {
   React.useEffect(() => {
     loadData();
   }, [loadData]);
+
+  const getPositionName = useCallback((pos?: string) => {
+    switch (pos) {
+      case 'A':
+        return t('routines.positions.A', 'Gestreckt');
+      case 'B':
+        return t('routines.positions.B', 'Gehechtet');
+      case 'C':
+        return t('routines.positions.C', 'Gehockt');
+      case 'D':
+        return t('routines.positions.D', 'Frei');
+      default:
+        return pos || '';
+    }
+  }, [t]);
 
   // Gefilterte Einträge für aktuelle Höhe
   const currentEntries = useMemo(
@@ -195,31 +212,37 @@ export default function TrainingStatusScreen() {
     }
   };
 
-  const handleAddDive = async (dive: DiveDefinition) => {
+  const handleAddDive = async (execution: DiveExecutionResponse, status: DiveStatus = 'PLANNED') => {
     if (!targetAthleteId) return;
     try {
-      // Find execution matching this dive code + selected height (prefer 'A' execution)
-      const backendHeight = HEIGHT_TO_BACKEND[selectedHeight];
-      const execution = catalogExecutions.find(
-        (e) => e.diveCode === dive.code && e.height === backendHeight && e.execution === 'A'
-      ) ?? catalogExecutions.find(
-        (e) => e.diveCode === dive.code && e.height === backendHeight
-      ) ?? catalogExecutions.find(
-        (e) => e.diveCode === dive.code
-      );
-
-      if (!execution) {
-        Alert.alert(t('common.error'), 'No execution found for this dive at the selected height');
-        return;
-      }
-
+      const learnedAt = status === 'MASTERED' ? new Date().toISOString().split('T')[0] : null;
       await api.updateAthleteDive(targetAthleteId, {
         diveExecutionId: execution.id,
-        status: 'PLANNED',
+        status,
+        learnedAt,
       });
       await loadData();
     } catch (e: any) {
       Alert.alert(t('common.error'), e?.message || 'Failed to add dive to training plan');
+    }
+  };
+
+  const handleAddMultipleDives = async (executions: DiveExecutionResponse[], status: DiveStatus = 'PLANNED') => {
+    if (!targetAthleteId || executions.length === 0) return;
+    try {
+      const learnedAt = status === 'MASTERED' ? new Date().toISOString().split('T')[0] : null;
+      await Promise.all(
+        executions.map((execution) =>
+          api.updateAthleteDive(targetAthleteId, {
+            diveExecutionId: execution.id,
+            status,
+            learnedAt,
+          })
+        )
+      );
+      await loadData();
+    } catch (e: any) {
+      Alert.alert(t('common.error'), e?.message || 'Failed to add dives to training plan');
     }
   };
 
@@ -241,9 +264,9 @@ export default function TrainingStatusScreen() {
     }
   };
 
-  const existingCodes = entries
-    .filter((e) => e.height === selectedHeight)
-    .map((e) => e.diveCode);
+  const existingExecutionIds = entries
+    .filter((e) => e.height === selectedHeight && e.diveExecutionId != null)
+    .map((e) => e.diveExecutionId as number);
 
   const renderEntry = (entry: AthleteTrainingEntry) => {
     const dive = getDiveDefinition(entry.diveCode);
@@ -272,7 +295,9 @@ export default function TrainingStatusScreen() {
         {/* Sprung-Header */}
         <View style={styles.entryHeader}>
           <View style={styles.codeChip}>
-            <Text style={styles.codeText}>{entry.diveCode}</Text>
+            <Text style={styles.codeText}>
+              {entry.diveCode}{entry.execution || ''}
+            </Text>
           </View>
           <View style={styles.entryTitle}>
             <Text style={styles.diveName} numberOfLines={1}>
@@ -284,9 +309,25 @@ export default function TrainingStatusScreen() {
                   {DIVE_GROUP_NAMES[dive.groupNumber]?.[isDE ? 'de' : 'en']}
                 </Text>
               )}
-              {entry.status === 'MASTERED' && entry.learnedAt ? (
+              {entry.execution ? (
                 <>
                   {dive && <Text style={styles.subtitleSeparator}>•</Text>}
+                  <Text style={styles.posMetaText}>
+                    {getPositionName(entry.execution)}
+                  </Text>
+                </>
+              ) : null}
+              {entry.degreeOfDifficulty != null ? (
+                <>
+                  <Text style={styles.subtitleSeparator}>•</Text>
+                  <Text style={styles.ddMetaText}>
+                    DD {entry.degreeOfDifficulty.toFixed(1)}
+                  </Text>
+                </>
+              ) : null}
+              {entry.status === 'MASTERED' && entry.learnedAt ? (
+                <>
+                  <Text style={styles.subtitleSeparator}>•</Text>
                   <Text style={styles.learnedDateSmall}>
                     {t('trainingStatus.learnedAt', {
                       date: formatLearnedDate(entry.learnedAt),
@@ -479,8 +520,10 @@ export default function TrainingStatusScreen() {
       <AddDiveModal
         visible={addDiveModal}
         height={selectedHeight}
-        existingCodes={existingCodes}
+        catalogExecutions={catalogExecutions}
+        existingExecutionIds={existingExecutionIds}
         onAdd={handleAddDive}
+        onAddMultiple={handleAddMultipleDives}
         onClose={() => setAddDiveModal(false)}
       />
 
@@ -653,6 +696,16 @@ const styles = StyleSheet.create({
   groupName: {
     fontSize: FontSize.xs,
     color: Colors.textTertiary,
+  },
+  posMetaText: {
+    fontSize: FontSize.xs,
+    color: Colors.textSecondary,
+    fontWeight: FontWeight.medium,
+  },
+  ddMetaText: {
+    fontSize: FontSize.xs,
+    color: Colors.primary,
+    fontWeight: FontWeight.bold,
   },
   subtitleSeparator: {
     fontSize: FontSize.xs,

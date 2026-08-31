@@ -40,6 +40,8 @@ export interface AthleteTrainingEntry {
     id: string;
     athleteId: string;
     diveCode: string;
+    execution?: ExecutionPosition;
+    degreeOfDifficulty?: number;
     diveExecutionId?: number;
     height: DiveHeight;
     status: DiveStatus;

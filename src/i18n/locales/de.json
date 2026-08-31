@@ -115,7 +115,15 @@
     "routinesBannerSub_other": "{{count}} Serie vorhanden",
     "learnedAt": "Gelernt am {{date}}",
     "learnedDate": "Datum (Gelernt am)",
-    "today": "Heute"
+    "today": "Heute",
+    "heightLabel": "Höhe",
+    "multiAdd": "Mehrere Sprünge hinzufügen",
+    "statusToAdd": "Status",
+    "multiSelect": "Mehrere auswählen",
+    "addSelectedDives": "{{count}} Sprung hinzufügen",
+    "addSelectedDives_other": "{{count}} Sprünge hinzufügen",
+    "selectedCount": "{{count}} ausgewählt",
+    "selectedCount_other": "{{count}} ausgewählt"
   },
   "diveSearch": {
     "title": "Sprungsuche",
