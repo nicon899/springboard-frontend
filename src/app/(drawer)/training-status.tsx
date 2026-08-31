@@ -82,6 +82,7 @@ export default function TrainingStatusScreen() {
     learnedAt: null,
   });
   const [addDiveModal, setAddDiveModal] = useState(false);
+  const [hideNotes, setHideNotes] = useState(false);
   const [noteModal, setNoteModal] = useState<{ visible: boolean; entryId: string }>({ visible: false, entryId: '' });
   const [noteText, setNoteText] = useState('');
   const [noteShared, setNoteShared] = useState(true);
@@ -314,18 +315,24 @@ export default function TrainingStatusScreen() {
     .filter((e) => e.height === selectedHeight && e.diveExecutionId != null)
     .map((e) => e.diveExecutionId as number);
 
-  const renderNotes = (entry: AthleteTrainingEntry, showEmptyAddButton: boolean = true) => {
+  const renderNotes = (entry: AthleteTrainingEntry) => {
+    if (hideNotes) {
+      return null;
+    }
+
     const visibleNotes = isTrainer
       ? entry.notes
       : entry.notes.filter((n) => n.sharedWithAthlete);
     const hasNotes = visibleNotes.length > 0;
     const isExpanded = !!expandedNotes[entry.id];
 
-    const sortedNotes = hasNotes
-      ? [...visibleNotes].sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        )
-      : [];
+    if (!hasNotes) {
+      return null;
+    }
+
+    const sortedNotes = [...visibleNotes].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
     const latestNote = sortedNotes[0];
     const latestDateFormatted = latestNote?.createdAt
       ? new Date(latestNote.createdAt).toLocaleDateString(isDE ? 'de-DE' : 'en-US', {
@@ -334,69 +341,61 @@ export default function TrainingStatusScreen() {
         })
       : '';
 
-    if (!hasNotes && !showEmptyAddButton) {
-      return null;
-    }
-
     return (
-      <>
-        {hasNotes && (
-          <View style={styles.notesSection}>
-            <TouchableOpacity
-              style={styles.notesToggleHeader}
-              onPress={() => toggleNotes(entry.id)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.notesToggleLeft}>
-                <Text style={styles.notesSectionTitle}>{t('trainingStatus.notes')}</Text>
-                <View style={styles.notesBadge}>
-                  <Text style={styles.notesBadgeText}>{visibleNotes.length}</Text>
-                </View>
-              </View>
+      <View style={styles.notesSection}>
+        <TouchableOpacity
+          style={styles.notesToggleHeader}
+          onPress={() => toggleNotes(entry.id)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.notesToggleLeft}>
+            <Text style={styles.notesSectionTitle}>{t('trainingStatus.notes')}</Text>
+            <View style={styles.notesBadge}>
+              <Text style={styles.notesBadgeText}>{visibleNotes.length}</Text>
+            </View>
+          </View>
 
-              <View style={styles.notesToggleRight}>
-                {!isExpanded && latestDateFormatted ? (
-                  <Text style={styles.notesLatestDate}>
-                    {t('trainingStatus.latestNote', { date: latestDateFormatted })}
+          <View style={styles.notesToggleRight}>
+            {!isExpanded && latestDateFormatted ? (
+              <Text style={styles.notesLatestDate}>
+                {t('trainingStatus.latestNote', { date: latestDateFormatted })}
+              </Text>
+            ) : null}
+            <Text style={styles.notesToggleChevron}>{isExpanded ? '▲' : '▼'}</Text>
+          </View>
+        </TouchableOpacity>
+
+        {isExpanded && (
+          <View style={styles.notesList}>
+            {sortedNotes.map((note) => (
+              <View key={note.id} style={styles.noteItem}>
+                <View style={styles.noteHeader}>
+                  <Text style={styles.noteAuthor}>{t('trainingStatus.noteBy', { author: note.authorName })}</Text>
+                  <Text style={styles.noteDate}>
+                    {new Date(note.createdAt).toLocaleDateString(isDE ? 'de-DE' : 'en-US', { month: 'short', day: 'numeric' })}
                   </Text>
-                ) : null}
-                <Text style={styles.notesToggleChevron}>{isExpanded ? '▲' : '▼'}</Text>
-              </View>
-            </TouchableOpacity>
-
-            {isExpanded && (
-              <View style={styles.notesList}>
-                {sortedNotes.map((note) => (
-                  <View key={note.id} style={styles.noteItem}>
-                    <View style={styles.noteHeader}>
-                      <Text style={styles.noteAuthor}>{t('trainingStatus.noteBy', { author: note.authorName })}</Text>
-                      <Text style={styles.noteDate}>
-                        {new Date(note.createdAt).toLocaleDateString(isDE ? 'de-DE' : 'en-US', { month: 'short', day: 'numeric' })}
-                      </Text>
-                      {!note.sharedWithAthlete && (
-                        <View style={styles.privateChip}>
-                          <Text style={styles.privateChipText}>🔒</Text>
-                        </View>
-                      )}
+                  {!note.sharedWithAthlete && (
+                    <View style={styles.privateChip}>
+                      <Text style={styles.privateChipText}>🔒</Text>
                     </View>
-                    <Text style={styles.noteText}>{note.text}</Text>
-                  </View>
-                ))}
+                  )}
+                </View>
+                <Text style={styles.noteText}>{note.text}</Text>
               </View>
+            ))}
+
+            {/* Trainer: Notiz hinzufügen Button nur wenn ausgeklappt */}
+            {isTrainer && (
+              <TouchableOpacity
+                style={styles.addNoteBtn}
+                onPress={() => setNoteModal({ visible: true, entryId: entry.id })}
+              >
+                <Text style={styles.addNoteBtnText}>+ {t('trainingStatus.addNote')}</Text>
+              </TouchableOpacity>
             )}
           </View>
         )}
-
-        {/* Trainer: Notiz hinzufügen Button */}
-        {isTrainer && (hasNotes || showEmptyAddButton) && (
-          <TouchableOpacity
-            style={styles.addNoteBtn}
-            onPress={() => setNoteModal({ visible: true, entryId: entry.id })}
-          >
-            <Text style={styles.addNoteBtnText}>+ {t('trainingStatus.addNote')}</Text>
-          </TouchableOpacity>
-        )}
-      </>
+      </View>
     );
   };
 
@@ -448,6 +447,16 @@ export default function TrainingStatusScreen() {
                   </Text>
                 </>
               ) : null}
+              {!hideNotes && isTrainer && (
+                <TouchableOpacity
+                  onPress={() => setNoteModal({ visible: true, entryId: entry.id })}
+                  style={styles.inlineAddNoteBtn}
+                  activeOpacity={0.6}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={styles.inlineAddNoteIcon}>📝</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
           {isTrainer ? (
@@ -470,7 +479,7 @@ export default function TrainingStatusScreen() {
           )}
         </View>
 
-        {renderNotes(entry, true)}
+        {!hideNotes && renderNotes(entry)}
       </View>
     );
   };
@@ -505,10 +514,6 @@ export default function TrainingStatusScreen() {
         <View style={styles.groupedExecutionsWrapper}>
           {group.entries.map((entry, idx) => {
             const isLast = idx === group.entries.length - 1;
-            const visibleNotes = isTrainer
-              ? entry.notes
-              : entry.notes.filter((n) => n.sharedWithAthlete);
-            const hasNotes = visibleNotes.length > 0;
 
             return (
               <View
@@ -538,7 +543,7 @@ export default function TrainingStatusScreen() {
                             </Text>
                           </>
                         )}
-                        {!hasNotes && isTrainer && (
+                        {!hideNotes && isTrainer && (
                           <TouchableOpacity
                             onPress={() => setNoteModal({ visible: true, entryId: entry.id })}
                             style={styles.inlineAddNoteBtn}
@@ -580,7 +585,7 @@ export default function TrainingStatusScreen() {
                   )}
                 </View>
 
-                {renderNotes(entry, false)}
+                {!hideNotes && renderNotes(entry)}
               </View>
             );
           })}
@@ -628,24 +633,40 @@ export default function TrainingStatusScreen() {
         <Text style={styles.routinesBannerArrow}>›</Text>
       </TouchableOpacity>
 
-      {/* Höhen-Auswahl */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.heightRow}
-      >
-        {HEIGHTS.map((h) => (
-          <TouchableOpacity
-            key={h}
-            style={[styles.heightChip, selectedHeight === h && styles.heightChipActive]}
-            onPress={() => setSelectedHeight(h)}
-          >
-            <Text style={[styles.heightChipLabel, selectedHeight === h && styles.heightChipLabelActive]}>
-              {h}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      {/* Höhen-Auswahl & Notizen-Sichtbarkeit */}
+      <View style={styles.heightFilterContainer}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.heightRow}
+          style={styles.heightScrollView}
+        >
+          {HEIGHTS.map((h) => (
+            <TouchableOpacity
+              key={h}
+              style={[styles.heightChip, selectedHeight === h && styles.heightChipActive]}
+              onPress={() => setSelectedHeight(h)}
+            >
+              <Text style={[styles.heightChipLabel, selectedHeight === h && styles.heightChipLabelActive]}>
+                {h}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        <TouchableOpacity
+          style={[styles.notesVisibilityBtn, hideNotes && styles.notesVisibilityBtnActive]}
+          onPress={() => setHideNotes((v) => !v)}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.notesVisibilityIcon}>{hideNotes ? '🙈' : '📝'}</Text>
+          <Text style={[styles.notesVisibilityText, hideNotes && styles.notesVisibilityTextActive]}>
+            {hideNotes
+              ? t('trainingStatus.notesHidden', 'Notizen ausgeblendet')
+              : t('trainingStatus.hideNotes', 'Notizen ausblenden')}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Sprung-Listen (nach Status gruppiert) */}
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -791,15 +812,26 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.semiBold,
     fontSize: FontSize.md,
   },
-  heightRow: {
+  heightFilterContainer: {
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+  },
+  heightScrollView: {
+    flexGrow: 0,
+  },
+  heightRow: {
+    paddingVertical: 2,
     flexDirection: 'row',
     gap: Spacing.sm,
   },
   heightChip: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs + 2,
     borderRadius: BorderRadius.full,
     borderWidth: 1.5,
     borderColor: Colors.border,
@@ -810,11 +842,38 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary,
   },
   heightChipLabel: {
-    fontSize: FontSize.md,
+    fontSize: FontSize.sm,
     fontWeight: FontWeight.semiBold,
     color: Colors.textSecondary,
   },
   heightChipLabelActive: { color: Colors.white },
+  notesVisibilityBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.white,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs + 2,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    gap: 4,
+  },
+  notesVisibilityBtnActive: {
+    backgroundColor: Colors.primarySurface,
+    borderColor: Colors.primary,
+  },
+  notesVisibilityIcon: {
+    fontSize: 12,
+  },
+  notesVisibilityText: {
+    fontSize: FontSize.xs,
+    color: Colors.textSecondary,
+    fontWeight: FontWeight.medium,
+  },
+  notesVisibilityTextActive: {
+    color: Colors.primary,
+    fontWeight: FontWeight.semiBold,
+  },
   scrollContent: { padding: Spacing.lg, paddingTop: Spacing.sm },
   sectionHeader: {
     fontSize: FontSize.sm,

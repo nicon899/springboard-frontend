@@ -123,7 +123,10 @@
     "addSelectedDives": "Add {{count}} dive",
     "addSelectedDives_other": "Add {{count}} dives",
     "selectedCount": "{{count}} selected",
-    "selectedCount_other": "{{count}} selected"
+    "selectedCount_other": "{{count}} selected",
+    "hideNotes": "Hide notes",
+    "showNotes": "Show notes",
+    "notesHidden": "Notes hidden"
   },
   "diveSearch": {
     "title": "Dive Search",

@@ -123,7 +123,10 @@
     "addSelectedDives": "{{count}} Sprung hinzufügen",
     "addSelectedDives_other": "{{count}} Sprünge hinzufügen",
     "selectedCount": "{{count}} ausgewählt",
-    "selectedCount_other": "{{count}} ausgewählt"
+    "selectedCount_other": "{{count}} ausgewählt",
+    "hideNotes": "Notizen ausblenden",
+    "showNotes": "Notizen einblenden",
+    "notesHidden": "Notizen ausgeblendet"
   },
   "diveSearch": {
     "title": "Sprungsuche",
