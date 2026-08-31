@@ -23,7 +23,6 @@ import { ClubRole } from '../types/user';
 import { api, ClubResponse } from '../../services/api';
 
 const ROLE_COLORS: Record<ClubRole, string> = {
-  CLUB_ADMIN: Colors.statusLearning,
   TRAINER: Colors.primary,
   MEMBER: Colors.textSecondary,
 };

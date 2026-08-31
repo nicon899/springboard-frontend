@@ -29,7 +29,7 @@ interface InviteModalProps {
   onClose: () => void;
 }
 
-const ROLES: InvitationRole[] = ['MEMBER', 'TRAINER', 'CLUB_ADMIN'];
+const ROLES: InvitationRole[] = ['MEMBER', 'TRAINER'];
 
 export default function InviteModal({ visible, clubId, onClose }: InviteModalProps) {
   const { t } = useTranslation();
@@ -42,7 +42,6 @@ export default function InviteModal({ visible, clubId, onClose }: InviteModalPro
   const ROLE_LABELS: Record<InvitationRole, string> = {
     MEMBER: t('club.inviteModal.roleMember'),
     TRAINER: t('club.inviteModal.roleTrainer'),
-    CLUB_ADMIN: t('club.inviteModal.roleAdmin'),
   };
 
   const handleGenerate = async () => {

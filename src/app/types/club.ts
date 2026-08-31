@@ -12,9 +12,9 @@ export interface Club {
 }
 
 // ────────────────────────────────────────────────────────────
-// Einladung (generiert von CLUB_ADMIN / ROLE_ADMIN)
+// Einladung (generiert von TRAINER / ROLE_ADMIN)
 // ────────────────────────────────────────────────────────────
-export type InvitationRole = ClubRole; // MEMBER | TRAINER | CLUB_ADMIN
+export type InvitationRole = ClubRole; // MEMBER | TRAINER
 
 export interface Invitation {
   token: string;

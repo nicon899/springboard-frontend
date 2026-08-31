@@ -73,23 +73,23 @@ export interface MembershipResponse {
   userEmail: string;
   clubId: number;
   clubName: string;
-  clubRole: 'CLUB_ADMIN' | 'TRAINER' | 'MEMBER';
+  clubRole: 'TRAINER' | 'MEMBER';
   joinedAt: string;
 }
 
 export interface AddMemberRequest {
   userId: number;
-  clubRole: 'CLUB_ADMIN' | 'TRAINER' | 'MEMBER';
+  clubRole: 'TRAINER' | 'MEMBER';
 }
 
 export interface UpdateMemberRoleRequest {
-  clubRole: 'CLUB_ADMIN' | 'TRAINER' | 'MEMBER';
+  clubRole: 'TRAINER' | 'MEMBER';
 }
 
 export interface CreateInvitationRequest {
   email: string;
   clubId: number;
-  role: 'CLUB_ADMIN' | 'TRAINER' | 'MEMBER';
+  role: 'TRAINER' | 'MEMBER';
 }
 
 export interface InvitationResponse {
@@ -97,7 +97,7 @@ export interface InvitationResponse {
   email: string;
   clubId: number;
   clubName: string;
-  targetRole: 'CLUB_ADMIN' | 'TRAINER' | 'MEMBER';
+  targetRole: 'TRAINER' | 'MEMBER';
   expiresAt: string;
 }
 

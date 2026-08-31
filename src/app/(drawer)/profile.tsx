@@ -105,7 +105,6 @@ export default function ProfileScreen() {
               style={[
                 styles.membershipRoleBadge,
                 m.role === 'TRAINER' && styles.roleTrainer,
-                m.role === 'CLUB_ADMIN' && styles.roleAdmin,
               ]}
             >
               <Text style={styles.membershipRoleText}>{t(`club.roles.${m.role}`)}</Text>

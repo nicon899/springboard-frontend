@@ -266,14 +266,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const isTrainerOrAdmin = useCallback(
-    () => hasClubRole('TRAINER', 'CLUB_ADMIN') || state.user?.globalRole === 'ROLE_ADMIN',
+    () => hasClubRole('TRAINER') || state.user?.globalRole === 'ROLE_ADMIN',
     [hasClubRole, state.user]
   );
 
   const canManageInvites = useCallback(
     () =>
       state.user?.globalRole === 'ROLE_ADMIN' ||
-      hasClubRole('CLUB_ADMIN'),
+      hasClubRole('TRAINER'),
     [state.user, hasClubRole]
   );
 

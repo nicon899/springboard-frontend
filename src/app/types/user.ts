@@ -6,7 +6,7 @@ export type GlobalRole = 'ROLE_ADMIN' | 'ROLE_USER';
 // ────────────────────────────────────────────────────────────
 // Vereinsbezogene Rollen (pro Club-Mitgliedschaft)
 // ────────────────────────────────────────────────────────────
-export type ClubRole = 'CLUB_ADMIN' | 'TRAINER' | 'MEMBER';
+export type ClubRole = 'TRAINER' | 'MEMBER';
 
 // ────────────────────────────────────────────────────────────
 // Mitgliedschaft eines Users in einem Verein
