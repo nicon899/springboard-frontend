@@ -87,7 +87,10 @@
     "athleteCard": {
       "age": "{{age}} Jahre",
       "masteredCount": "{{count}} Sprung gesichert",
-      "masteredCount_other": "{{count}} Sprünge gesichert"
+      "masteredCount_other": "{{count}} Sprünge gesichert",
+      "unreadComments": "{{count}} neu",
+      "unreadCommentsSingle": "1 neu",
+      "unreadCommentsLabel": "Neue Kommentare"
     }
   },
   "trainingStatus": {
@@ -141,6 +144,8 @@
     "showNotes": "Notizen einblenden",
     "notesHidden": "Notizen ausgeblendet",
     "commentsSectionTitle": "Kommentare & Notizen",
+    "newCommentBadge": "Neu",
+    "unread": "Ungelesen",
     "addCommentBtn": "Kommentar hinzufügen",
     "noComments": "Keine Kommentare vorhanden.",
     "noCommentsSub": "Füge Notizen oder Feedback zum Sportler hinzu.",

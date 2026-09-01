@@ -87,7 +87,10 @@
     "athleteCard": {
       "age": "{{age}} years",
       "masteredCount": "{{count}} dive mastered",
-      "masteredCount_other": "{{count}} dives mastered"
+      "masteredCount_other": "{{count}} dives mastered",
+      "unreadComments": "{{count}} new",
+      "unreadCommentsSingle": "1 new",
+      "unreadCommentsLabel": "New comments"
     }
   },
   "trainingStatus": {
@@ -141,6 +144,8 @@
     "showNotes": "Show notes",
     "notesHidden": "Notes hidden",
     "commentsSectionTitle": "Comments & Notes",
+    "newCommentBadge": "New",
+    "unread": "Unread",
     "addCommentBtn": "Add Comment",
     "noComments": "No comments yet.",
     "noCommentsSub": "Add notes or feedback for this athlete.",

@@ -73,5 +73,6 @@ export interface AthleteListItem {
   age: number;
   category: 'YOUTH' | 'COMPETITIVE' | 'OTHER';
   masteredDiveCount: number;
+  unreadCommentCount?: number;
   avatarColor?: string; // Für initialen-Avatar
 }

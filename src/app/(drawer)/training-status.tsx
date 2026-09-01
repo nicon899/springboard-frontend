@@ -83,6 +83,16 @@ export default function TrainingStatusScreen() {
       setRawAthleteDives(divesRes);
       setCatalogExecutions(catalogRes);
 
+      // If there are unread comments for current user, mark them as read in backend
+      const hasUnreadComments = commentsRes.some(
+        (c) => c.isRead === false && String(c.authorId) !== String(user?.id)
+      );
+      if (hasUnreadComments) {
+        api.markCommentsAsRead(targetAthleteId).catch((err) => {
+          console.warn('Failed to mark comments as read:', err);
+        });
+      }
+
       const mappedEntries: AthleteTrainingEntry[] = divesRes.map((d) => ({
         id: String(d.id),
         athleteId: String(d.athleteId),
@@ -463,6 +473,7 @@ export default function TrainingStatusScreen() {
                     : undefined;
                   const isPrivate = !comment.sharedWithAthlete;
                   const isAuthor = String(comment.authorId) === String(user?.id);
+                  const isUnread = !isAuthor && comment.isRead === false;
                   const isGlobalAdmin = user?.globalRole === 'ROLE_ADMIN';
                   const canEdit = isAuthor || isGlobalAdmin;
                   const canDelete = isAuthor || isTrainer || isGlobalAdmin;
@@ -481,7 +492,11 @@ export default function TrainingStatusScreen() {
                   return (
                     <View
                       key={comment.id}
-                      style={[styles.commentCard, isPrivate && styles.commentCardPrivate]}
+                      style={[
+                        styles.commentCard,
+                        isPrivate && styles.commentCardPrivate,
+                        isUnread && styles.commentCardUnread,
+                      ]}
                     >
                       {/* Kommentar Card Header */}
                       <View style={styles.commentCardHeader}>
@@ -494,6 +509,15 @@ export default function TrainingStatusScreen() {
 
                         {/* Badges & Actions */}
                         <View style={styles.commentBadgesRow}>
+                          {/* Neu / Ungelesen Badge */}
+                          {isUnread && (
+                            <View style={styles.unreadCommentBadge}>
+                              <Text style={styles.unreadCommentBadgeText}>
+                                ✨ {t('trainingStatus.newCommentBadge', 'Neu')}
+                              </Text>
+                            </View>
+                          )}
+
                           {/* Sprung-Badge (z. B. 103B) im einheitlichen Routinen/Sprünge Stil */}
                           {diveInfo ? (
                             <View style={styles.diveBadgeContainer}>
@@ -835,6 +859,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.borderLight,
     ...Shadows.sm,
+  },
+  commentCardUnread: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#F59E0B',
+    backgroundColor: '#FFFDF5',
+  },
+  unreadCommentBadge: {
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+  },
+  unreadCommentBadgeText: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.bold,
+    color: '#B45309',
   },
   commentCardPrivate: {
     backgroundColor: '#FFFDF0',

@@ -178,6 +178,7 @@ export interface CommentResponse {
   athleteId: number;
   athleteDiveStatusId?: number;
   createdAt: string;
+  isRead?: boolean;
 }
 
 export interface CreateCommentRequest {
@@ -685,6 +686,22 @@ export const api = {
 
   async deleteComment(athleteId: number | string, commentId: number | string): Promise<void> {
     return request<void>(`/api/v1/athletes/${athleteId}/comments/${commentId}`, { method: 'DELETE' });
+  },
+
+  async markCommentsAsRead(athleteId: number | string): Promise<void> {
+    return request<void>(`/api/v1/athletes/${athleteId}/comments/read`, { method: 'POST' });
+  },
+
+  async markSingleCommentAsRead(athleteId: number | string, commentId: number | string): Promise<void> {
+    return request<void>(`/api/v1/athletes/${athleteId}/comments/${commentId}/read`, { method: 'POST' });
+  },
+
+  async getAthleteCommentsUnreadCount(athleteId: number | string): Promise<{ unreadCount: number }> {
+    return request<{ unreadCount: number }>(`/api/v1/athletes/${athleteId}/comments/unread-count`);
+  },
+
+  async getClubCommentsUnreadCounts(clubId: number | string): Promise<Record<string, number>> {
+    return request<Record<string, number>>(`/api/v1/clubs/${clubId}/comments/unread-counts`);
   },
 
   // ── Routine Specifications (Serienspezifikationen) ──
