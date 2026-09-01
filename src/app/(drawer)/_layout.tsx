@@ -264,6 +264,19 @@ export default function DrawerLayout() {
         }}
       />
       <Drawer.Screen
+        name="dives"
+        options={{
+          title: t('nav.dives', 'Sprünge'),
+          drawerItemStyle: styles.hidden,
+          headerLeft: ({ tintColor }) => (
+            <HeaderBackButton
+              tintColor={tintColor}
+              fallbackRoute="/(drawer)/training-status"
+            />
+          ),
+        }}
+      />
+      <Drawer.Screen
         name="routines"
         options={{
           title: t('nav.routines', 'Serien'),
@@ -271,7 +284,7 @@ export default function DrawerLayout() {
           headerLeft: ({ tintColor }) => (
             <HeaderBackButton
               tintColor={tintColor}
-              fallbackRoute="/(drawer)/trainer"
+              fallbackRoute="/(drawer)/training-status"
             />
           ),
         }}

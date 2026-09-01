@@ -92,7 +92,7 @@ export default function DiveSearchScreen() {
 
   const handleAddToTrainingPlan = (dive: DiveDefinition) => {
     router.push({
-      pathname: '/(drawer)/training-status',
+      pathname: '/(drawer)/dives',
       params: { athleteId: user?.id },
     });
   };
@@ -346,7 +346,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
   },
   codeBlock: {
-    backgroundColor: Colors.primary,
+    backgroundColor: Colors.primarySurface,
     borderRadius: BorderRadius.sm,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
@@ -357,7 +357,7 @@ const styles = StyleSheet.create({
   codeText: {
     fontSize: FontSize.lg,
     fontWeight: FontWeight.bold,
-    color: Colors.white,
+    color: Colors.primary,
   },
   resultInfo: { flex: 1 },
   resultName: {

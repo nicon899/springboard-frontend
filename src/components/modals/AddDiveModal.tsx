@@ -441,7 +441,9 @@ export default function AddDiveModal({
                                   isAlreadyInPlan && styles.execDdTextAdded,
                                 ]}
                               >
-                                DD {exec.degreeOfDifficulty?.toFixed(1)}
+                                {t('common.difficultyBadge', {
+                                  dd: exec.degreeOfDifficulty?.toFixed(1),
+                                })}
                               </Text>
                             </View>
                           </TouchableOpacity>

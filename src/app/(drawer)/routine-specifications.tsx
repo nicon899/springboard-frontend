@@ -84,7 +84,8 @@ function specToForm(spec: RoutineSpecificationResponse): SpecFormData {
 // ────────────────────────────────────────────────────────────
 
 export default function RoutineSpecificationsScreen() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isDE = i18n.language === 'de';
   const router = useRouter();
   const { activeClubId, activeClubMembership, isTrainerOrAdmin } = useAuth();
 
@@ -259,7 +260,7 @@ export default function RoutineSpecificationsScreen() {
           <MetaChip label={t('routineSpecifications.groups', 'Gruppen')} value={String(spec.numberOfGroups)} />
         )}
         {spec.maxDifficultyScore != null && (
-          <MetaChip label={t('routineSpecifications.maxDifficulty', 'Max. SKG')} value={spec.maxDifficultyScore.toFixed(1)} />
+          <MetaChip label={t('routineSpecifications.maxDifficulty')} value={spec.maxDifficultyScore.toFixed(1)} />
         )}
         {spec.gender && spec.gender !== 'ALL' && (
           <MetaChip label={t('routineSpecifications.gender', 'Geschlecht')} value={getGenderLabel(spec.gender)} />
@@ -373,7 +374,7 @@ export default function RoutineSpecificationsScreen() {
               </View>
 
               {/* Max DD/SKG */}
-              <FormField label={t('routineSpecifications.maxDifficultyScoreLabel', 'Max. Schwierigkeitsgrad (SKG)')}>
+              <FormField label={t('routineSpecifications.maxDifficultyScoreLabel')}>
                 <TextInput
                   style={styles.input}
                   placeholder={t('routineSpecifications.maxDifficultyScorePlaceholder', 'z. B. 7.5')}

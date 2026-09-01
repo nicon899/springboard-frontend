@@ -221,6 +221,7 @@ function SpecTag({ label, value, warning }: { label: string; value: string; warn
 export default function RoutinesScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
+  const isDE = i18n.language === 'de';
   const { user, activeClubId, isTrainerOrAdmin } = useAuth();
   const params = useLocalSearchParams<{ athleteId?: string; athleteName?: string }>();
 
@@ -1148,7 +1149,7 @@ export default function RoutinesScreen() {
                   <SpecTag label={t('routines.tags.groups', 'Gruppen')} value={String(spec.numberOfGroups)} />
                 )}
                 {spec.maxDifficultyScore != null && (
-                  <SpecTag label={t('routines.tags.maxDifficulty', 'Max. SKG')} value={spec.maxDifficultyScore.toFixed(1)} />
+                  <SpecTag label={t('routines.tags.maxDifficulty')} value={spec.maxDifficultyScore.toFixed(1)} />
                 )}
                 {spec.ageCategory && (
                   <SpecTag
@@ -1180,7 +1181,7 @@ export default function RoutinesScreen() {
             {/* Kennzahlen-Leiste */}
             <View style={styles.statsBar}>
               <View style={styles.statItem}>
-                <Text style={styles.statLabel}>{t('routines.stats.totalDifficulty', 'Gesamt-SKG')}</Text>
+                <Text style={styles.statLabel}>{t('routines.stats.totalDifficulty')}</Text>
                 <Text style={styles.statValue}>
                   {totalDD.toFixed(1)}
                   {spec?.maxDifficultyScore != null ? (
@@ -1331,9 +1332,8 @@ export default function RoutinesScreen() {
                           <Text style={styles.diveMetaBadge}>{heightText}</Text>
                           <Text style={styles.diveMetaBadge}>{posLabel}</Text>
                           <Text style={styles.diveMetaBadge}>
-                            {t('routines.difficultyBadge', {
+                            {t('common.difficultyBadge', {
                               dd: de.degreeOfDifficulty.toFixed(1),
-                              defaultValue: `SKG ${de.degreeOfDifficulty.toFixed(1)}`,
                             })}
                           </Text>
                           <Text style={styles.diveMetaText}>{groupName}</Text>
@@ -1447,7 +1447,6 @@ export default function RoutinesScreen() {
                       s.maxDifficultyScore != null
                         ? t('routines.dropdown.maxDifficultyShort', {
                             max: s.maxDifficultyScore,
-                            defaultValue: `SKG max. ${s.maxDifficultyScore}`,
                           })
                         : null,
                     ]
@@ -2081,9 +2080,8 @@ export default function RoutinesScreen() {
                           <Text style={styles.catalogMetaBadge}>{uiHeight}</Text>
                           <Text style={styles.catalogMetaBadge}>{posName}</Text>
                           <Text style={styles.catalogMetaBadge}>
-                            {t('routines.difficultyBadge', {
+                            {t('common.difficultyBadge', {
                               dd: item.degreeOfDifficulty.toFixed(1),
-                              defaultValue: `SKG ${item.degreeOfDifficulty.toFixed(1)}`,
                             })}
                           </Text>
                           <Text style={styles.catalogMetaGroup}>
@@ -2190,14 +2188,14 @@ export default function RoutinesScreen() {
                   onPress={() => handlePresetSort('ddAsc')}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.presetChipText}>{t('routines.sortModal.presetDdAsc', '📈 SKG aufsteigend')}</Text>
+                  <Text style={styles.presetChipText}>{t('routines.sortModal.presetDdAsc')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.presetChip}
                   onPress={() => handlePresetSort('ddDesc')}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.presetChipText}>{t('routines.sortModal.presetDdDesc', '📉 SKG absteigend')}</Text>
+                  <Text style={styles.presetChipText}>{t('routines.sortModal.presetDdDesc')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.presetChip}
@@ -2221,9 +2219,8 @@ export default function RoutinesScreen() {
                 const posLabel = getPositionName(de.execution);
                 const groupName = getGroupName(de.groupNumber);
                 const diveTitle = (i18n.language === 'en' ? (de.nameEn || de.nameDe) : (de.nameDe || de.nameEn)) || de.diveCode;
-                const ddBadge = t('routines.difficultyBadge', {
+                const ddBadge = t('common.difficultyBadge', {
                   dd: de.degreeOfDifficulty.toFixed(1),
-                  defaultValue: `SKG ${de.degreeOfDifficulty.toFixed(1)}`,
                 });
                 const isFirst = idx === 0;
                 const isLast = idx === sortModalDives.length - 1;
@@ -2379,14 +2376,14 @@ export default function RoutinesScreen() {
                   onPress={() => handlePresetSortRoutines('ddDesc')}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.presetChipText}>{t('routines.sortRoutinesModal.presetDdDesc', '📈 Höchste SKG')}</Text>
+                  <Text style={styles.presetChipText}>{t('routines.sortRoutinesModal.presetDdDesc')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.presetChip}
                   onPress={() => handlePresetSortRoutines('ddAsc')}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.presetChipText}>{t('routines.sortRoutinesModal.presetDdAsc', '📉 Niedrigste SKG')}</Text>
+                  <Text style={styles.presetChipText}>{t('routines.sortRoutinesModal.presetDdAsc')}</Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>
@@ -2409,8 +2406,10 @@ export default function RoutinesScreen() {
                 if (r.template?.name && r.displayName) {
                   metaParts.push(r.template.name);
                 }
-                metaParts.push(`${count} ${count === 1 ? 'Sprung' : 'Sprünge'}`);
-                metaParts.push(`SKG ${totalDD.toFixed(1)}`);
+                metaParts.push(t('routines.diveCount', { count }));
+                metaParts.push(t('common.difficultyBadge', {
+                  dd: totalDD.toFixed(1),
+                }));
                 if (r.updatedAt) {
                   const d = new Date(r.updatedAt);
                   metaParts.push(`Aktualisiert: ${d.toLocaleDateString()}`);

@@ -1,0 +1,1061 @@
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import {
+  Alert,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
+import { useAuth } from '../../context/AuthContext';
+import StatusBadge from '../../components/ui/StatusBadge';
+import StatusChangeModal from '../../components/modals/StatusChangeModal';
+import AddDiveModal from '../../components/modals/AddDiveModal';
+import {
+  BorderRadius,
+  Colors,
+  FontSize,
+  FontWeight,
+  Shadows,
+  Spacing,
+} from '../constants/theme';
+import { AthleteTrainingEntry, DiveHeight, DiveStatus, TrainerNote } from '../types/dive';
+import { DIVE_GROUP_NAMES } from '../constants/diveData';
+
+import {
+  api,
+  BACKEND_TO_HEIGHT,
+  AthleteDiveStatusResponse,
+  CommentResponse,
+  DiveExecutionResponse,
+} from '../../services/api';
+
+const HEIGHTS: DiveHeight[] = ['1m', '3m', '5m', '7.5m', '10m'];
+const STATUSES: DiveStatus[] = ['PLANNED', 'LEARNING', 'MASTERED'];
+
+interface GroupedStatusDive {
+  key: string;
+  diveCode: string;
+  groupNumber: number;
+  nameDe: string;
+  nameEn: string;
+  status: DiveStatus;
+  entries: AthleteTrainingEntry[];
+}
+
+export default function AthleteDivesScreen() {
+  const { t, i18n } = useTranslation();
+  const { user, isTrainerOrAdmin } = useAuth();
+  const params = useLocalSearchParams<{ athleteId?: string; athleteName?: string }>();
+  const navigation = useNavigation();
+  const router = useRouter();
+
+  const isTrainer = isTrainerOrAdmin();
+  const targetAthleteId = params.athleteId ?? user?.id ?? '';
+  const viewingAthlete = params.athleteId && params.athleteId !== user?.id;
+  const athleteLabel = params.athleteName ?? t('trainingStatus.myTraining');
+
+  const [selectedHeight, setSelectedHeight] = useState<DiveHeight>('1m');
+  const [entries, setEntries] = useState<AthleteTrainingEntry[]>([]);
+  const [catalogExecutions, setCatalogExecutions] = useState<DiveExecutionResponse[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Modals
+  const [statusModal, setStatusModal] = useState<{
+    visible: boolean;
+    entryId: string;
+    diveExecutionId?: number;
+    current: DiveStatus;
+    learnedAt?: string | null;
+  }>({
+    visible: false,
+    entryId: '',
+    current: 'PLANNED',
+    learnedAt: null,
+  });
+  const [addDiveModal, setAddDiveModal] = useState(false);
+  const [hideNotes, setHideNotes] = useState(false);
+  const [noteModal, setNoteModal] = useState<{ visible: boolean; entryId: string }>({ visible: false, entryId: '' });
+  const [noteText, setNoteText] = useState('');
+  const [noteShared, setNoteShared] = useState(true);
+  const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
+
+  const toggleNotes = (entryId: string) => {
+    setExpandedNotes((prev) => ({
+      ...prev,
+      [entryId]: !prev[entryId],
+    }));
+  };
+
+  const isDE = i18n.language === 'de';
+
+  const formatLearnedDate = (isoDate: string) => {
+    try {
+      const parts = isoDate.split('-');
+      if (parts.length === 3) {
+        const [year, month, day] = parts;
+        return isDE ? `${day}.${month}.${year}` : `${year}-${month}-${day}`;
+      }
+      return new Date(isoDate).toLocaleDateString(isDE ? 'de-DE' : 'en-US');
+    } catch {
+      return isoDate;
+    }
+  };
+
+  // Load catalog executions & athlete dives from API
+  const loadData = useCallback(async () => {
+    if (!targetAthleteId) return;
+    setIsLoading(true);
+    try {
+      const [divesRes, commentsRes, catalogRes] = await Promise.all([
+        api.getAthleteDives(targetAthleteId).catch(() => [] as AthleteDiveStatusResponse[]),
+        api.getAthleteComments(targetAthleteId).catch(() => [] as CommentResponse[]),
+        api.getAllDiveExecutions().catch(() => [] as DiveExecutionResponse[]),
+      ]);
+
+      setCatalogExecutions(catalogRes);
+
+      const mappedEntries: AthleteTrainingEntry[] = divesRes.map((d) => {
+        const diveNotes: TrainerNote[] = commentsRes
+          .filter((c) => c.athleteDiveStatusId === d.id || (!c.athleteDiveStatusId && String(c.athleteId) === String(targetAthleteId)))
+          .map((c) => ({
+            id: String(c.id),
+            text: c.content,
+            authorId: String(c.authorId),
+            authorName: c.authorName || 'Trainer',
+            createdAt: c.createdAt,
+            sharedWithAthlete: c.sharedWithAthlete,
+          }));
+
+        return {
+          id: String(d.id),
+          athleteId: String(d.athleteId),
+          diveCode: d.diveCode,
+          execution: d.execution,
+          degreeOfDifficulty: d.degreeOfDifficulty,
+          diveExecutionId: d.diveExecutionId,
+          height: BACKEND_TO_HEIGHT[d.height] || '1m',
+          status: d.status,
+          learnedAt: d.learnedAt ?? null,
+          notes: diveNotes,
+        };
+      });
+
+      setEntries(mappedEntries);
+    } catch (e: any) {
+      console.warn('Failed to load training status data:', e);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [targetAthleteId]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Set navigation header title
+  useEffect(() => {
+    navigation.setOptions({
+      title: viewingAthlete ? `${athleteLabel} – ${t('nav.dives', 'Sprünge')}` : t('nav.dives', 'Sprünge'),
+    });
+  }, [navigation, viewingAthlete, athleteLabel, t]);
+
+  const currentEntries = useMemo(() => {
+    return entries.filter((e) => e.height === selectedHeight);
+  }, [entries, selectedHeight]);
+
+  const getPositionName = useCallback((pos?: string) => {
+    if (!pos) return '';
+    switch (pos) {
+      case 'A': return t('diveSearch.positionA');
+      case 'B': return t('diveSearch.positionB');
+      case 'C': return t('diveSearch.positionC');
+      case 'D': return t('diveSearch.positionD');
+      default: return pos;
+    }
+  }, [t]);
+
+  const getDiveDefinition = useCallback((code: string) => {
+    const exec = catalogExecutions.find((c) => c.diveCode === code);
+    if (!exec) return null;
+    return {
+      code: exec.diveCode,
+      nameDe: exec.nameDe,
+      nameEn: exec.nameEn,
+      groupNumber: exec.groupNumber,
+    };
+  }, [catalogExecutions]);
+
+  const groupedByStatus = useMemo(() => {
+    const result: Record<DiveStatus, GroupedStatusDive[]> = {
+      PLANNED: [],
+      LEARNING: [],
+      MASTERED: [],
+    };
+
+    const statusMaps: Record<DiveStatus, Map<string, GroupedStatusDive>> = {
+      PLANNED: new Map(),
+      LEARNING: new Map(),
+      MASTERED: new Map(),
+    };
+
+    currentEntries.forEach((entry) => {
+      const diveDef = getDiveDefinition(entry.diveCode);
+      let group = statusMaps[entry.status].get(entry.diveCode);
+      if (!group) {
+        group = {
+          key: `${entry.status}_${entry.diveCode}`,
+          diveCode: entry.diveCode,
+          groupNumber: diveDef?.groupNumber || 1,
+          nameDe: diveDef?.nameDe || entry.diveCode,
+          nameEn: diveDef?.nameEn || entry.diveCode,
+          status: entry.status,
+          entries: [],
+        };
+        statusMaps[entry.status].set(entry.diveCode, group);
+        result[entry.status].push(group);
+      }
+      group.entries.push(entry);
+    });
+
+    for (const st of STATUSES) {
+      result[st].forEach((group) => {
+        group.entries.sort((a, b) => (a.execution || '').localeCompare(b.execution || ''));
+      });
+    }
+
+    return result;
+  }, [currentEntries, getDiveDefinition]);
+
+  const handleStatusChange = async (status: DiveStatus, learnedAt?: string | null) => {
+    const targetEntry = entries.find((e) => e.id === statusModal.entryId);
+    if (!targetEntry || !targetAthleteId) return;
+
+    setStatusModal((s) => ({ ...s, visible: false }));
+
+    const diveExecutionId = (targetEntry as any).diveExecutionId ?? statusModal.diveExecutionId;
+    if (!diveExecutionId) {
+      Alert.alert(t('common.error'), 'Could not find dive execution ID');
+      return;
+    }
+
+    try {
+      await api.updateAthleteDive(targetAthleteId, {
+        diveExecutionId,
+        status,
+        learnedAt: status === 'MASTERED' ? learnedAt : null,
+      });
+      await loadData();
+    } catch (e: any) {
+      Alert.alert(t('common.error'), e?.message || 'Failed to update dive status');
+    }
+  };
+
+  const handleAddDive = async (execution: DiveExecutionResponse, status: DiveStatus = 'PLANNED') => {
+    if (!targetAthleteId) return;
+    try {
+      const learnedAt = status === 'MASTERED' ? new Date().toISOString().split('T')[0] : null;
+      await api.updateAthleteDive(targetAthleteId, {
+        diveExecutionId: execution.id,
+        status,
+        learnedAt,
+      });
+      await loadData();
+    } catch (e: any) {
+      Alert.alert(t('common.error'), e?.message || 'Failed to add dive to training plan');
+    }
+  };
+
+  const handleAddMultipleDives = async (executions: DiveExecutionResponse[], status: DiveStatus = 'PLANNED') => {
+    if (!targetAthleteId || executions.length === 0) return;
+    try {
+      const learnedAt = status === 'MASTERED' ? new Date().toISOString().split('T')[0] : null;
+      await Promise.all(
+        executions.map((execution) =>
+          api.updateAthleteDive(targetAthleteId, {
+            diveExecutionId: execution.id,
+            status,
+            learnedAt,
+          })
+        )
+      );
+      await loadData();
+    } catch (e: any) {
+      Alert.alert(t('common.error'), e?.message || 'Failed to add dives to training plan');
+    }
+  };
+
+  const handleAddNote = async () => {
+    if (!noteText.trim() || !noteModal.entryId || !targetAthleteId) return;
+    try {
+      const statusIdNum = Number(noteModal.entryId);
+      await api.createComment(targetAthleteId, {
+        athleteId: Number(targetAthleteId),
+        content: noteText.trim(),
+        sharedWithAthlete: noteShared,
+        athleteDiveStatusId: isNaN(statusIdNum as number) ? undefined : statusIdNum,
+      });
+      setNoteText('');
+      setNoteModal({ visible: false, entryId: '' });
+      await loadData();
+    } catch (e: any) {
+      Alert.alert(t('common.error'), e?.message || 'Failed to add note');
+    }
+  };
+
+  const existingExecutionIds = entries
+    .filter((e) => e.height === selectedHeight && e.diveExecutionId != null)
+    .map((e) => e.diveExecutionId as number);
+
+  const renderNotes = (entry: AthleteTrainingEntry) => {
+    if (hideNotes) {
+      return null;
+    }
+
+    const visibleNotes = isTrainer
+      ? entry.notes
+      : entry.notes.filter((n) => n.sharedWithAthlete);
+    const hasNotes = visibleNotes.length > 0;
+    const isExpanded = !!expandedNotes[entry.id];
+
+    if (!hasNotes) {
+      return null;
+    }
+
+    const sortedNotes = [...visibleNotes].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+    const latestNote = sortedNotes[0];
+    const latestDateFormatted = latestNote?.createdAt
+      ? new Date(latestNote.createdAt).toLocaleDateString(isDE ? 'de-DE' : 'en-US', {
+          day: 'numeric',
+          month: 'short',
+        })
+      : '';
+
+    return (
+      <View style={styles.notesSection}>
+        <TouchableOpacity
+          style={styles.notesToggleHeader}
+          onPress={() => toggleNotes(entry.id)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.notesToggleLeft}>
+            <Text style={styles.notesSectionTitle}>{t('trainingStatus.notes')}</Text>
+            <View style={styles.notesBadge}>
+              <Text style={styles.notesBadgeText}>{visibleNotes.length}</Text>
+            </View>
+          </View>
+
+          <View style={styles.notesToggleRight}>
+            {!isExpanded && latestDateFormatted ? (
+              <Text style={styles.notesLatestDate}>
+                {t('trainingStatus.latestNote', { date: latestDateFormatted })}
+              </Text>
+            ) : null}
+            <Text style={styles.notesToggleChevron}>{isExpanded ? '▲' : '▼'}</Text>
+          </View>
+        </TouchableOpacity>
+
+        {isExpanded && (
+          <View style={styles.notesList}>
+            {sortedNotes.map((note) => (
+              <View key={note.id} style={styles.noteItem}>
+                <View style={styles.noteHeader}>
+                  <Text style={styles.noteAuthor}>{t('trainingStatus.noteBy', { author: note.authorName })}</Text>
+                  <Text style={styles.noteDate}>
+                    {new Date(note.createdAt).toLocaleDateString(isDE ? 'de-DE' : 'en-US', { month: 'short', day: 'numeric' })}
+                  </Text>
+                  {!note.sharedWithAthlete && (
+                    <View style={styles.privateChip}>
+                      <Text style={styles.privateChipText}>🔒</Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.noteText}>{note.text}</Text>
+              </View>
+            ))}
+
+            {isTrainer && (
+              <TouchableOpacity
+                style={styles.addNoteBtn}
+                onPress={() => setNoteModal({ visible: true, entryId: entry.id })}
+              >
+                <Text style={styles.addNoteBtnText}>+ {t('trainingStatus.addNote')}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const renderGroupedDive = (group: GroupedStatusDive) => {
+    return (
+      <View key={group.key} style={styles.groupedCard}>
+        {/* Sprung-Header */}
+        <View style={styles.groupedHeader}>
+          <View style={styles.codeChip}>
+            <Text style={styles.codeText}>{group.diveCode}</Text>
+          </View>
+          <View style={styles.groupedTitle}>
+            <Text style={styles.diveName} numberOfLines={1}>
+              {isDE ? group.nameDe : group.nameEn}
+            </Text>
+            <Text style={styles.groupName}>
+              {DIVE_GROUP_NAMES[group.groupNumber]?.[isDE ? 'de' : 'en']}
+            </Text>
+          </View>
+        </View>
+
+        {/* Ausführungs-Zeilen */}
+        <View style={styles.groupedExecList}>
+          {group.entries.map((entry, idx) => {
+            const isLast = idx === group.entries.length - 1;
+            return (
+              <View key={entry.id} style={[styles.groupedExecItem, !isLast && styles.groupedExecItemBorder]}>
+                <View style={styles.groupedExecRow}>
+                  <View style={styles.groupedExecLeft}>
+                    <View style={styles.groupedExecPosBadge}>
+                      <Text style={styles.groupedExecPosBadgeText}>
+                        {entry.execution || '—'}
+                      </Text>
+                    </View>
+                    <View style={styles.groupedExecMetaCol}>
+                      <View style={styles.groupedExecMetaRow}>
+                        <Text style={styles.groupedExecPosName}>
+                          {getPositionName(entry.execution)}
+                        </Text>
+                        {entry.degreeOfDifficulty != null && (
+                          <>
+                            <Text style={styles.subtitleSeparator}>•</Text>
+                            <Text style={styles.ddMetaText}>
+                              {t('common.difficultyBadge', {
+                                dd: entry.degreeOfDifficulty.toFixed(1),
+                              })}
+                            </Text>
+                          </>
+                        )}
+                        {!hideNotes && isTrainer && (
+                          <TouchableOpacity
+                            onPress={() => setNoteModal({ visible: true, entryId: entry.id })}
+                            style={styles.inlineAddNoteBtn}
+                            activeOpacity={0.6}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          >
+                            <Text style={styles.inlineAddNoteIcon}>📝</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                      {entry.status === 'MASTERED' && entry.learnedAt ? (
+                        <Text style={styles.learnedDateSmall}>
+                          {t('trainingStatus.learnedAt', {
+                            date: formatLearnedDate(entry.learnedAt),
+                            defaultValue: `Gelernt am ${formatLearnedDate(entry.learnedAt)}`,
+                          })}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+
+                  <View style={styles.groupedExecRight}>
+                    {isTrainer ? (
+                      <TouchableOpacity
+                        onPress={() =>
+                          setStatusModal({
+                            visible: true,
+                            entryId: entry.id,
+                            diveExecutionId: entry.diveExecutionId,
+                            current: entry.status,
+                            learnedAt: entry.learnedAt,
+                          })
+                        }
+                        activeOpacity={0.7}
+                      >
+                        <StatusBadge status={entry.status} size="sm" />
+                      </TouchableOpacity>
+                    ) : (
+                      <StatusBadge status={entry.status} size="sm" />
+                    )}
+                  </View>
+                </View>
+
+                {/* Notizen */}
+                {renderNotes(entry)}
+              </View>
+            );
+          })}
+        </View>
+      </View>
+    );
+  };
+
+  return (
+    <View style={styles.container}>
+      {/* Athleten-Label (wenn vom Trainer geöffnet) */}
+      {viewingAthlete && (
+        <View style={styles.athleteBanner}>
+          <Text style={styles.athleteBannerText}>👤 {athleteLabel}</Text>
+        </View>
+      )}
+
+      {/* Höhen-Auswahl & Notizen-Sichtbarkeit */}
+      <View style={styles.heightFilterContainer}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.heightRow}
+          style={styles.heightScrollView}
+        >
+          {HEIGHTS.map((h) => (
+            <TouchableOpacity
+              key={h}
+              style={[styles.heightChip, selectedHeight === h && styles.heightChipActive]}
+              onPress={() => setSelectedHeight(h)}
+            >
+              <Text style={[styles.heightChipLabel, selectedHeight === h && styles.heightChipLabelActive]}>
+                {h}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        <TouchableOpacity
+          style={[styles.notesVisibilityBtn, hideNotes && styles.notesVisibilityBtnActive]}
+          onPress={() => setHideNotes((v) => !v)}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.notesVisibilityIcon}>{hideNotes ? '🙈' : '📝'}</Text>
+          <Text style={[styles.notesVisibilityText, hideNotes && styles.notesVisibilityTextActive]}>
+            {hideNotes
+              ? t('trainingStatus.notesHidden', 'Notizen ausgeblendet')
+              : t('trainingStatus.hideNotes', 'Notizen ausblenden')}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Sprung-Listen (nach Status gruppiert) */}
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {STATUSES.map((status) => {
+          const groupList = groupedByStatus[status];
+          if (groupList.length === 0) return null;
+          const statusLabelKey = `trainingStatus.status${status.charAt(0) + status.slice(1).toLowerCase()}` as any;
+          return (
+            <View key={status}>
+              <Text style={styles.sectionHeader}>{t(statusLabelKey)}</Text>
+              {groupList.map(renderGroupedDive)}
+            </View>
+          );
+        })}
+
+        {currentEntries.length === 0 && (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>{t('trainingStatus.noDivesForHeight')}</Text>
+          </View>
+        )}
+
+        {/* Sprung hinzufügen Button (nur Trainer) */}
+        {isTrainer && (
+          <TouchableOpacity
+            style={styles.addDiveBtn}
+            onPress={() => setAddDiveModal(true)}
+          >
+            <Text style={styles.addDiveBtnText}>+ {t('trainingStatus.addDive')}</Text>
+          </TouchableOpacity>
+        )}
+      </ScrollView>
+
+      {/* Modals */}
+      <StatusChangeModal
+        visible={statusModal.visible}
+        currentStatus={statusModal.current}
+        currentLearnedAt={statusModal.learnedAt}
+        onSelect={handleStatusChange}
+        onClose={() => setStatusModal((s) => ({ ...s, visible: false }))}
+      />
+
+      <AddDiveModal
+        visible={addDiveModal}
+        height={selectedHeight}
+        catalogExecutions={catalogExecutions}
+        existingExecutionIds={existingExecutionIds}
+        onAdd={handleAddDive}
+        onAddMultiple={handleAddMultipleDives}
+        onClose={() => setAddDiveModal(false)}
+      />
+
+      {/* Notiz-Modal */}
+      <Modal
+        visible={noteModal.visible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setNoteModal({ visible: false, entryId: '' })}
+      >
+        <View style={styles.noteOverlay}>
+          <View style={styles.noteSheet}>
+            <Text style={styles.noteSheetTitle}>{t('trainingStatus.addNote')}</Text>
+            <TextInput
+              style={styles.noteInput}
+              placeholder={t('trainingStatus.notePlaceholder')}
+              placeholderTextColor={Colors.textTertiary}
+              value={noteText}
+              onChangeText={setNoteText}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+            {/* Toggle: Für Sportler sichtbar */}
+            <TouchableOpacity
+              style={styles.shareToggle}
+              onPress={() => setNoteShared((v) => !v)}
+            >
+              <View style={[styles.toggle, noteShared && styles.toggleOn]}>
+                <View style={[styles.toggleThumb, noteShared && styles.toggleThumbOn]} />
+              </View>
+              <Text style={styles.shareToggleLabel}>
+                {t('trainingStatus.sharedWithAthlete')}
+              </Text>
+            </TouchableOpacity>
+
+            <View style={styles.noteActions}>
+              <TouchableOpacity
+                style={styles.noteCancelBtn}
+                onPress={() => {
+                  setNoteText('');
+                  setNoteModal({ visible: false, entryId: '' });
+                }}
+              >
+                <Text style={styles.noteCancelText}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.noteSaveBtn, !noteText.trim() && styles.noteSaveBtnDisabled]}
+                onPress={handleAddNote}
+                disabled={!noteText.trim()}
+              >
+                <Text style={styles.noteSaveText}>{t('common.save')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  athleteBanner: {
+    backgroundColor: Colors.primaryLight,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.primary,
+  },
+  athleteBannerText: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.medium,
+    color: Colors.primaryDark,
+  },
+  heightFilterContainer: {
+    backgroundColor: Colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    paddingVertical: Spacing.sm,
+    flexDirection: 'column',
+    gap: Spacing.xs,
+  },
+  heightScrollView: {
+    flexGrow: 0,
+  },
+  heightRow: {
+    paddingHorizontal: Spacing.lg,
+    gap: Spacing.sm,
+  },
+  heightChip: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.surfaceSecondary,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  heightChipActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  heightChipLabel: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.medium,
+    color: Colors.textSecondary,
+  },
+  heightChipLabelActive: {
+    color: Colors.textOnPrimary,
+    fontWeight: FontWeight.bold,
+  },
+  notesVisibilityBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    marginLeft: Spacing.lg,
+    paddingVertical: 4,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: Colors.surfaceSecondary,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    gap: Spacing.xs,
+  },
+  notesVisibilityBtnActive: {
+    backgroundColor: Colors.borderLight,
+  },
+  notesVisibilityIcon: {
+    fontSize: 12,
+  },
+  notesVisibilityText: {
+    fontSize: FontSize.xs,
+    color: Colors.textSecondary,
+    fontWeight: FontWeight.medium,
+  },
+  notesVisibilityTextActive: {
+    color: Colors.textTertiary,
+  },
+  scrollContent: {
+    padding: Spacing.lg,
+    paddingBottom: Spacing.xxxl,
+  },
+  sectionHeader: {
+    fontSize: FontSize.md,
+    fontWeight: FontWeight.bold,
+    color: Colors.textPrimary,
+    marginTop: Spacing.md,
+    marginBottom: Spacing.sm,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  groupedCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.lg,
+    marginBottom: Spacing.md,
+    ...Shadows.sm,
+    overflow: 'hidden',
+  },
+  groupedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    backgroundColor: Colors.surfaceSecondary,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+    gap: Spacing.md,
+  },
+  codeChip: {
+    backgroundColor: Colors.primarySurface,
+    borderRadius: BorderRadius.xs,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    minWidth: 48,
+    alignItems: 'center',
+  },
+  codeText: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.bold,
+    color: Colors.primary,
+  },
+  groupedTitle: {
+    flex: 1,
+  },
+  diveName: {
+    fontSize: FontSize.md,
+    fontWeight: FontWeight.semiBold,
+    color: Colors.textPrimary,
+  },
+  groupName: {
+    fontSize: FontSize.xs,
+    color: Colors.textSecondary,
+  },
+  groupedExecList: {
+    paddingHorizontal: Spacing.md,
+  },
+  groupedExecItem: {
+    paddingVertical: Spacing.sm,
+  },
+  groupedExecItemBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+  },
+  groupedExecRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  groupedExecLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    flex: 1,
+  },
+  groupedExecPosBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: Colors.surfaceSecondary,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  groupedExecPosBadgeText: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.bold,
+    color: Colors.textPrimary,
+  },
+  groupedExecMetaCol: {
+    flex: 1,
+  },
+  groupedExecMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    flexWrap: 'wrap',
+  },
+  groupedExecPosName: {
+    fontSize: FontSize.sm,
+    color: Colors.textPrimary,
+  },
+  subtitleSeparator: {
+    fontSize: FontSize.xs,
+    color: Colors.textTertiary,
+  },
+  ddMetaText: {
+    fontSize: FontSize.xs,
+    color: Colors.textSecondary,
+    fontWeight: FontWeight.medium,
+  },
+  learnedDateSmall: {
+    fontSize: 11,
+    color: Colors.success,
+    fontWeight: FontWeight.medium,
+    marginTop: 2,
+  },
+  groupedExecRight: {
+    marginLeft: Spacing.sm,
+  },
+  inlineAddNoteBtn: {
+    padding: 2,
+    marginLeft: 2,
+  },
+  inlineAddNoteIcon: {
+    fontSize: 13,
+  },
+  notesSection: {
+    marginTop: Spacing.xs,
+    paddingTop: Spacing.xs,
+  },
+  notesToggleHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 2,
+  },
+  notesToggleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  notesSectionTitle: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.semiBold,
+    color: Colors.textSecondary,
+  },
+  notesBadge: {
+    backgroundColor: Colors.primaryLight,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: BorderRadius.full,
+  },
+  notesBadgeText: {
+    fontSize: 10,
+    fontWeight: FontWeight.bold,
+    color: Colors.primaryDark,
+  },
+  notesToggleRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  notesLatestDate: {
+    fontSize: 10,
+    color: Colors.textTertiary,
+  },
+  notesToggleChevron: {
+    fontSize: 10,
+    color: Colors.textTertiary,
+  },
+  notesList: {
+    marginTop: Spacing.xs,
+    paddingLeft: Spacing.sm,
+    borderLeftWidth: 2,
+    borderLeftColor: Colors.border,
+    gap: Spacing.xs,
+  },
+  noteItem: {
+    backgroundColor: Colors.surfaceSecondary,
+    padding: Spacing.xs,
+    borderRadius: BorderRadius.sm,
+  },
+  noteHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    marginBottom: 2,
+  },
+  noteAuthor: {
+    fontSize: 11,
+    fontWeight: FontWeight.semiBold,
+    color: Colors.textPrimary,
+  },
+  noteDate: {
+    fontSize: 10,
+    color: Colors.textTertiary,
+    flex: 1,
+  },
+  privateChip: {
+    backgroundColor: Colors.border,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+  },
+  privateChipText: {
+    fontSize: 9,
+  },
+  noteText: {
+    fontSize: FontSize.xs,
+    color: Colors.textPrimary,
+  },
+  addNoteBtn: {
+    paddingVertical: 3,
+  },
+  addNoteBtnText: {
+    fontSize: FontSize.xs,
+    color: Colors.primary,
+    fontWeight: FontWeight.medium,
+  },
+  emptyContainer: {
+    padding: Spacing.xxl,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: FontSize.md,
+    color: Colors.textTertiary,
+    textAlign: 'center',
+  },
+  addDiveBtn: {
+    backgroundColor: Colors.primary,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.lg,
+    alignItems: 'center',
+    marginTop: Spacing.lg,
+    ...Shadows.sm,
+  },
+  addDiveBtnText: {
+    color: Colors.textOnPrimary,
+    fontSize: FontSize.md,
+    fontWeight: FontWeight.bold,
+  },
+  noteOverlay: {
+    flex: 1,
+    backgroundColor: Colors.overlay,
+    justifyContent: 'flex-end',
+  },
+  noteSheet: {
+    backgroundColor: Colors.surface,
+    borderTopLeftRadius: BorderRadius.xl,
+    borderTopRightRadius: BorderRadius.xl,
+    padding: Spacing.xl,
+    gap: Spacing.md,
+  },
+  noteSheetTitle: {
+    fontSize: FontSize.lg,
+    fontWeight: FontWeight.bold,
+    color: Colors.textPrimary,
+  },
+  noteInput: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    fontSize: FontSize.md,
+    color: Colors.textPrimary,
+    minHeight: 100,
+    backgroundColor: Colors.surfaceSecondary,
+  },
+  shareToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  toggle: {
+    width: 44,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: Colors.border,
+    padding: 2,
+    justifyContent: 'center',
+  },
+  toggleOn: {
+    backgroundColor: Colors.primary,
+  },
+  toggleThumb: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: Colors.surface,
+  },
+  toggleThumbOn: {
+    alignSelf: 'flex-end',
+  },
+  shareToggleLabel: {
+    fontSize: FontSize.sm,
+    color: Colors.textPrimary,
+  },
+  noteActions: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+  },
+  noteCancelBtn: {
+    flex: 1,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+  },
+  noteCancelText: {
+    fontSize: FontSize.md,
+    color: Colors.textSecondary,
+    fontWeight: FontWeight.medium,
+  },
+  noteSaveBtn: {
+    flex: 1,
+    backgroundColor: Colors.primary,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+  },
+  noteSaveBtnDisabled: {
+    opacity: 0.5,
+  },
+  noteSaveText: {
+    fontSize: FontSize.md,
+    color: Colors.textOnPrimary,
+    fontWeight: FontWeight.bold,
+  },
+});
