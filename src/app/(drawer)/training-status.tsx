@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -10,6 +11,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import AddCommentModal from '../../components/modals/AddCommentModal';
 import { useAuth } from '../../context/AuthContext';
 import {
   BorderRadius,
@@ -19,20 +21,25 @@ import {
   Shadows,
   Spacing,
 } from '../constants/theme';
-import { AthleteTrainingEntry, DiveHeight, DiveStatus } from '../types/dive';
+import { AthleteTrainingEntry, DiveHeight } from '../types/dive';
 
 import {
   api,
   BACKEND_TO_HEIGHT,
   AthleteDiveStatusResponse,
+  CommentResponse,
+  DiveExecutionResponse,
   RoutineResponse,
 } from '../../services/api';
 
-const HEIGHTS: DiveHeight[] = ['1m', '3m', '5m', '7.5m', '10m'];
+type CommentFilterType = 'ALL' | 'GENERAL' | 'DIVE';
 
 export default function TrainingStatusScreen() {
-  const { t } = useTranslation();
-  const { user } = useAuth();
+  const { t, i18n } = useTranslation();
+  const isDE = i18n.language === 'de';
+  const { user, isTrainerOrAdmin } = useAuth();
+  const isTrainer = isTrainerOrAdmin();
+
   const params = useLocalSearchParams<{ athleteId?: string; athleteName?: string }>();
   const navigation = useNavigation();
   const router = useRouter();
@@ -42,9 +49,14 @@ export default function TrainingStatusScreen() {
   const athleteLabel = params.athleteName ?? t('trainingStatus.myTraining');
 
   const [entries, setEntries] = useState<AthleteTrainingEntry[]>([]);
+  const [rawAthleteDives, setRawAthleteDives] = useState<AthleteDiveStatusResponse[]>([]);
+  const [catalogExecutions, setCatalogExecutions] = useState<DiveExecutionResponse[]>([]);
   const [routines, setRoutines] = useState<RoutineResponse[]>([]);
+  const [comments, setComments] = useState<CommentResponse[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isAddCommentModalVisible, setIsAddCommentModalVisible] = useState(false);
+  const [commentFilter, setCommentFilter] = useState<CommentFilterType>('ALL');
 
   const loadData = useCallback(async (refresh = false) => {
     if (!targetAthleteId) return;
@@ -52,12 +64,17 @@ export default function TrainingStatusScreen() {
     else setIsLoading(true);
 
     try {
-      const [divesRes, routinesRes] = await Promise.all([
+      const [divesRes, routinesRes, commentsRes, catalogRes] = await Promise.all([
         api.getAthleteDives(targetAthleteId).catch(() => [] as AthleteDiveStatusResponse[]),
         api.getRoutinesByUser(targetAthleteId).catch(() => [] as RoutineResponse[]),
+        api.getAthleteComments(targetAthleteId).catch(() => [] as CommentResponse[]),
+        api.getAllDiveExecutions().catch(() => [] as DiveExecutionResponse[]),
       ]);
 
       setRoutines(routinesRes);
+      setComments(commentsRes);
+      setRawAthleteDives(divesRes);
+      setCatalogExecutions(catalogRes);
 
       const mappedEntries: AthleteTrainingEntry[] = divesRes.map((d) => ({
         id: String(d.id),
@@ -92,6 +109,19 @@ export default function TrainingStatusScreen() {
     });
   }, [navigation, viewingAthlete, athleteLabel, t]);
 
+  // Map athleteDiveStatusId to dive info for quick badge lookup
+  const athleteDiveStatusMap = useMemo(() => {
+    const map = new Map<number, { diveCode: string; execution: string; height: string }>();
+    rawAthleteDives.forEach((d) => {
+      map.set(d.id, {
+        diveCode: d.diveCode,
+        execution: d.execution,
+        height: BACKEND_TO_HEIGHT[d.height] || '1m',
+      });
+    });
+    return map;
+  }, [rawAthleteDives]);
+
   // Calculations for stats
   const stats = useMemo(() => {
     const mastered = entries.filter((e) => e.status === 'MASTERED').length;
@@ -119,13 +149,85 @@ export default function TrainingStatusScreen() {
     return { mastered, learning, planned, total, byHeight };
   }, [entries]);
 
+  // Visible & filtered comments
+  const visibleComments = useMemo(() => {
+    const baseList = isTrainer ? comments : comments.filter((c) => c.sharedWithAthlete);
+    let list = baseList;
+    if (commentFilter === 'GENERAL') {
+      list = list.filter((c) => !c.athleteDiveStatusId);
+    } else if (commentFilter === 'DIVE') {
+      list = list.filter((c) => !!c.athleteDiveStatusId);
+    }
+
+    return [...list].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+  }, [comments, isTrainer, commentFilter]);
+
+  const generalCommentsCount = useMemo(() => {
+    const base = isTrainer ? comments : comments.filter((c) => c.sharedWithAthlete);
+    return base.filter((c) => !c.athleteDiveStatusId).length;
+  }, [comments, isTrainer]);
+
+  const diveCommentsCount = useMemo(() => {
+    const base = isTrainer ? comments : comments.filter((c) => c.sharedWithAthlete);
+    return base.filter((c) => !!c.athleteDiveStatusId).length;
+  }, [comments, isTrainer]);
+
+  const totalVisibleCommentsCount = useMemo(() => {
+    const base = isTrainer ? comments : comments.filter((c) => c.sharedWithAthlete);
+    return base.length;
+  }, [comments, isTrainer]);
+
+  const handleCreateComment = async (data: {
+    content: string;
+    sharedWithAthlete: boolean;
+    athleteDiveStatusId?: number;
+  }) => {
+    if (!targetAthleteId) return;
+    try {
+      await api.createComment(targetAthleteId, {
+        athleteId: Number(targetAthleteId),
+        content: data.content,
+        sharedWithAthlete: data.sharedWithAthlete,
+        athleteDiveStatusId: data.athleteDiveStatusId,
+      });
+      await loadData(true);
+    } catch (e: any) {
+      Alert.alert(t('common.error', 'Fehler'), e?.message || 'Failed to save comment');
+      throw e;
+    }
+  };
+
+  const handleDeleteComment = (comment: CommentResponse) => {
+    Alert.alert(
+      t('trainingStatus.deleteCommentConfirmTitle', 'Kommentar löschen'),
+      t('trainingStatus.deleteCommentConfirmMsg', 'Möchtest du diesen Kommentar wirklich löschen?'),
+      [
+        { text: t('common.cancel', 'Abbrechen'), style: 'cancel' },
+        {
+          text: t('common.delete', 'Löschen'),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await api.deleteComment(targetAthleteId, comment.id);
+              await loadData(true);
+            } catch (e: any) {
+              Alert.alert(t('common.error', 'Fehler'), e?.message || 'Failed to delete comment');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const navParams = useMemo(() => {
     return params.athleteId
       ? { athleteId: params.athleteId, athleteName: params.athleteName }
       : {};
   }, [params.athleteId, params.athleteName]);
 
-  const navigateToDives = (height?: DiveHeight) => {
+  const navigateToDives = () => {
     router.push({
       pathname: '/(drawer)/dives',
       params: navParams,
@@ -227,68 +329,215 @@ export default function TrainingStatusScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Statistik Übersicht */}
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionHeaderTitle}>
-              {t('trainingStatus.statsTitle', 'Statistik & Übersicht')}
-            </Text>
-          </View>
+          {/* ── Kommentare & Notizen Bereich ── */}
+          <View style={styles.commentsSection}>
+            {/* Header mit Titel, Zähler und Hinzufügen-Button */}
+            <View style={styles.commentsHeader}>
+              <View style={styles.commentsHeaderLeft}>
+                <Text style={styles.commentsTitle}>
+                  {t('trainingStatus.commentsSectionTitle', 'Kommentare & Notizen')}
+                </Text>
+                <View style={styles.commentsBadge}>
+                  <Text style={styles.commentsBadgeText}>{totalVisibleCommentsCount}</Text>
+                </View>
+              </View>
 
-          {/* Stat-Kacheln Grid */}
-          <View style={styles.statsGrid}>
-            <View style={[styles.statTile, styles.statTileMastered]}>
-              <Text style={styles.statTileValue}>{stats.mastered}</Text>
-              <Text style={styles.statTileLabel}>{t('trainingStatus.statsMastered', 'Sicher')}</Text>
-            </View>
-            <View style={[styles.statTile, styles.statTileLearning]}>
-              <Text style={styles.statTileValue}>{stats.learning}</Text>
-              <Text style={styles.statTileLabel}>{t('trainingStatus.statsLearning', 'Im Aufbau')}</Text>
-            </View>
-            <View style={[styles.statTile, styles.statTilePlanned]}>
-              <Text style={styles.statTileValue}>{stats.planned}</Text>
-              <Text style={styles.statTileLabel}>{t('trainingStatus.statsPlanned', 'Geplant')}</Text>
-            </View>
-            <View style={[styles.statTile, styles.statTileTotal]}>
-              <Text style={styles.statTileValue}>{stats.total}</Text>
-              <Text style={styles.statTileLabel}>{t('trainingStatus.statsTotal', 'Gesamt')}</Text>
-            </View>
-          </View>
-
-          {/* Übersicht nach Höhen */}
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionHeaderTitle}>
-              {t('trainingStatus.heightOverviewTitle', 'Sprünge nach Höhe')}
-            </Text>
-          </View>
-
-          <View style={styles.heightCardsList}>
-            {HEIGHTS.map((h) => {
-              const hStats = stats.byHeight[h];
-              return (
+              {isTrainer && (
                 <TouchableOpacity
-                  key={h}
-                  style={styles.heightCard}
-                  onPress={() => navigateToDives(h)}
-                  activeOpacity={0.7}
+                  style={styles.addCommentBtn}
+                  onPress={() => setIsAddCommentModalVisible(true)}
+                  activeOpacity={0.8}
                 >
-                  <View style={styles.heightChip}>
-                    <Text style={styles.heightChipText}>{h}</Text>
-                  </View>
-                  <View style={styles.heightStatsRow}>
-                    <Text style={styles.heightMasteredText}>
-                      {hStats.mastered} {t('trainingStatus.statsMastered', 'sicher')}
-                    </Text>
-                    <Text style={styles.heightTotalText}>
-                      / {hStats.total} {t('trainingStatus.statsTotal', 'gesamt')}
-                    </Text>
-                  </View>
-                  <Text style={styles.heightCardArrow}>›</Text>
+                  <Text style={styles.addCommentBtnText}>
+                    + {t('trainingStatus.addCommentBtn', 'Kommentar hinzufügen')}
+                  </Text>
                 </TouchableOpacity>
-              );
-            })}
+              )}
+            </View>
+
+            {/* Filter-Chips (Alle, Allgemein, Sprungbezogen) */}
+            {totalVisibleCommentsCount > 0 && (
+              <View style={styles.filterChipsRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.filterChip,
+                    commentFilter === 'ALL' && styles.filterChipActive,
+                  ]}
+                  onPress={() => setCommentFilter('ALL')}
+                >
+                  <Text
+                    style={[
+                      styles.filterChipText,
+                      commentFilter === 'ALL' && styles.filterChipTextActive,
+                    ]}
+                  >
+                    {t('trainingStatus.filterAll', 'Alle')} ({totalVisibleCommentsCount})
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.filterChip,
+                    commentFilter === 'GENERAL' && styles.filterChipActive,
+                  ]}
+                  onPress={() => setCommentFilter('GENERAL')}
+                >
+                  <Text
+                    style={[
+                      styles.filterChipText,
+                      commentFilter === 'GENERAL' && styles.filterChipTextActive,
+                    ]}
+                  >
+                    💬 {t('trainingStatus.filterGeneral', 'Allgemein')} ({generalCommentsCount})
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.filterChip,
+                    commentFilter === 'DIVE' && styles.filterChipActive,
+                  ]}
+                  onPress={() => setCommentFilter('DIVE')}
+                >
+                  <Text
+                    style={[
+                      styles.filterChipText,
+                      commentFilter === 'DIVE' && styles.filterChipTextActive,
+                    ]}
+                  >
+                    🏊 {t('trainingStatus.filterDive', 'Sprungbezogen')} ({diveCommentsCount})
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Liste der Kommentare */}
+            {visibleComments.length === 0 ? (
+              <View style={styles.emptyCommentsCard}>
+                <Text style={styles.emptyCommentsIcon}>💬</Text>
+                <Text style={styles.emptyCommentsTitle}>
+                  {t('trainingStatus.noComments', 'Keine Kommentare vorhanden.')}
+                </Text>
+                <Text style={styles.emptyCommentsSub}>
+                  {t(
+                    'trainingStatus.noCommentsSub',
+                    'Füge Notizen oder Feedback zum Sportler hinzu.'
+                  )}
+                </Text>
+                {isTrainer && (
+                  <TouchableOpacity
+                    style={styles.emptyAddBtn}
+                    onPress={() => setIsAddCommentModalVisible(true)}
+                  >
+                    <Text style={styles.emptyAddBtnText}>
+                      + {t('trainingStatus.addCommentBtn', 'Kommentar hinzufügen')}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ) : (
+              <View style={styles.commentsList}>
+                {visibleComments.map((comment) => {
+                  const diveInfo = comment.athleteDiveStatusId
+                    ? athleteDiveStatusMap.get(comment.athleteDiveStatusId)
+                    : undefined;
+                  const isPrivate = !comment.sharedWithAthlete;
+
+                  const dateFormatted = new Date(comment.createdAt).toLocaleDateString(
+                    isDE ? 'de-DE' : 'en-US',
+                    {
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    }
+                  );
+
+                  return (
+                    <View
+                      key={comment.id}
+                      style={[styles.commentCard, isPrivate && styles.commentCardPrivate]}
+                    >
+                      {/* Kommentar Card Header */}
+                      <View style={styles.commentCardHeader}>
+                        <View style={styles.commentAuthorCol}>
+                          <Text style={styles.commentAuthor}>
+                            👤 {comment.authorName || 'Trainer'}
+                          </Text>
+                          <Text style={styles.commentDate}>{dateFormatted}</Text>
+                        </View>
+
+                        {/* Badges & Actions */}
+                        <View style={styles.commentBadgesRow}>
+                          {/* Sprung-Badge (z. B. 103B) im einheitlichen Routinen/Sprünge Stil */}
+                          {diveInfo ? (
+                            <View style={styles.diveBadgeContainer}>
+                              <View style={styles.codeChip}>
+                                <Text style={styles.codeText}>
+                                  {diveInfo.diveCode}{diveInfo.execution}
+                                </Text>
+                              </View>
+                              <Text style={styles.diveHeightText}>{diveInfo.height}</Text>
+                            </View>
+                          ) : comment.athleteDiveStatusId ? (
+                            <View style={styles.codeChip}>
+                              <Text style={styles.codeText}>
+                                #{comment.athleteDiveStatusId}
+                              </Text>
+                            </View>
+                          ) : (
+                            <View style={styles.generalCommentBadge}>
+                              <Text style={styles.generalCommentBadgeText}>
+                                💬 {t('trainingStatus.generalComment', 'Allgemein')}
+                              </Text>
+                            </View>
+                          )}
+
+                          {/* Privat-Badge */}
+                          {isPrivate && isTrainer && (
+                            <View style={styles.privateBadge}>
+                              <Text style={styles.privateBadgeText}>
+                                🔒 {t('trainingStatus.onlyTrainer', 'Nur Trainer')}
+                              </Text>
+                            </View>
+                          )}
+
+                          {/* Löschen Button (Trainer/Admin) */}
+                          {isTrainer && (
+                            <TouchableOpacity
+                              style={styles.deleteCommentBtn}
+                              onPress={() => handleDeleteComment(comment)}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            >
+                              <Text style={styles.deleteCommentIcon}>✕</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      </View>
+
+                      {/* Kommentar Inhalt */}
+                      <Text style={[styles.commentContent, isPrivate && styles.commentContentPrivate]}>
+                        {comment.content}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
           </View>
         </>
       )}
+
+      {/* Modal zum Hinzufügen eines Kommentars */}
+      <AddCommentModal
+        visible={isAddCommentModalVisible}
+        athleteId={targetAthleteId}
+        athleteDives={entries}
+        catalogExecutions={catalogExecutions}
+        onSave={handleCreateComment}
+        onClose={() => setIsAddCommentModalVisible(false)}
+      />
     </ScrollView>
   );
 }
@@ -404,108 +653,233 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.medium,
     color: Colors.textPrimary,
   },
-  sectionHeaderRow: {
-    marginBottom: Spacing.sm,
+
+  /* ── Kommentare & Notizen Styles ── */
+  commentsSection: {
     marginTop: Spacing.xs,
-  },
-  sectionHeaderTitle: {
-    fontSize: FontSize.md,
-    fontWeight: FontWeight.bold,
-    color: Colors.textPrimary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
     marginBottom: Spacing.xl,
   },
-  statTile: {
-    flex: 1,
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.lg,
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.xs,
+  commentsHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
-    ...Shadows.sm,
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
+    justifyContent: 'space-between',
+    marginBottom: Spacing.md,
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
   },
-  statTileMastered: {
-    borderBottomWidth: 3,
-    borderBottomColor: Colors.success,
+  commentsHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
   },
-  statTileLearning: {
-    borderBottomWidth: 3,
-    borderBottomColor: Colors.warning,
-  },
-  statTilePlanned: {
-    borderBottomWidth: 3,
-    borderBottomColor: Colors.border,
-  },
-  statTileTotal: {
-    borderBottomWidth: 3,
-    borderBottomColor: Colors.primary,
-  },
-  statTileValue: {
-    fontSize: FontSize.xl,
+  commentsTitle: {
+    fontSize: FontSize.lg,
     fontWeight: FontWeight.bold,
     color: Colors.textPrimary,
   },
-  statTileLabel: {
+  commentsBadge: {
+    backgroundColor: Colors.primaryLight,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.full,
+  },
+  commentsBadgeText: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.bold,
+    color: Colors.primaryDark,
+  },
+  addCommentBtn: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs + 2,
+    borderRadius: BorderRadius.md,
+    ...Shadows.sm,
+  },
+  addCommentBtnText: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.bold,
+    color: Colors.white,
+  },
+  filterChipsRow: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+    marginBottom: Spacing.md,
+    flexWrap: 'wrap',
+  },
+  filterChip: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  filterChipActive: {
+    backgroundColor: Colors.primarySurface,
+    borderColor: Colors.primary,
+  },
+  filterChipText: {
     fontSize: FontSize.xs,
     color: Colors.textSecondary,
-    marginTop: 2,
-    textAlign: 'center',
+    fontWeight: FontWeight.medium,
   },
-  heightCardsList: {
-    gap: Spacing.xs,
+  filterChipTextActive: {
+    color: Colors.primary,
+    fontWeight: FontWeight.bold,
+  },
+  emptyCommentsCard: {
     backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.lg,
-    overflow: 'hidden',
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
     borderColor: Colors.borderLight,
     ...Shadows.sm,
   },
-  heightCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.borderLight,
+  emptyCommentsIcon: {
+    fontSize: 36,
+    marginBottom: Spacing.sm,
   },
-  heightChip: {
-    backgroundColor: Colors.primarySurface,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 3,
-    borderRadius: BorderRadius.xs,
-    minWidth: 42,
-    alignItems: 'center',
-  },
-  heightChipText: {
-    color: Colors.primary,
-    fontSize: FontSize.xs,
-    fontWeight: FontWeight.bold,
-  },
-  heightStatsRow: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginLeft: Spacing.md,
-    gap: 4,
-  },
-  heightMasteredText: {
-    fontSize: FontSize.sm,
+  emptyCommentsTitle: {
+    fontSize: FontSize.md,
     fontWeight: FontWeight.semiBold,
-    color: Colors.success,
+    color: Colors.textPrimary,
+    marginBottom: 4,
+    textAlign: 'center',
   },
-  heightTotalText: {
+  emptyCommentsSub: {
     fontSize: FontSize.sm,
     color: Colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: Spacing.md,
   },
-  heightCardArrow: {
-    fontSize: 18,
+  emptyAddBtn: {
+    backgroundColor: Colors.primaryLight,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+  },
+  emptyAddBtnText: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.bold,
+    color: Colors.primaryDark,
+  },
+  commentsList: {
+    gap: Spacing.md,
+  },
+  commentCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.lg,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    ...Shadows.sm,
+  },
+  commentCardPrivate: {
+    backgroundColor: '#FFFDF0',
+    borderColor: '#FFE082',
+  },
+  commentCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.sm,
+    gap: Spacing.sm,
+    flexWrap: 'wrap',
+  },
+  commentAuthorCol: {
+    flex: 1,
+    minWidth: 120,
+  },
+  commentAuthor: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.bold,
+    color: Colors.textPrimary,
+  },
+  commentDate: {
+    fontSize: FontSize.xs,
     color: Colors.textTertiary,
+    marginTop: 2,
+  },
+  commentBadgesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    flexWrap: 'wrap',
+  },
+  diveBadgeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  codeChip: {
+    backgroundColor: Colors.primarySurface,
+    borderRadius: BorderRadius.xs,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    minWidth: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  codeText: {
+    fontSize: FontSize.xs + 1,
+    fontWeight: FontWeight.bold,
+    color: Colors.primary,
+  },
+  diveHeightText: {
+    fontSize: FontSize.xs,
+    color: Colors.textSecondary,
+    fontWeight: FontWeight.medium,
+  },
+  generalCommentBadge: {
+    backgroundColor: Colors.surfaceSecondary,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 3,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  generalCommentBadgeText: {
+    fontSize: FontSize.xs,
+    color: Colors.textSecondary,
+    fontWeight: FontWeight.medium,
+  },
+  privateBadge: {
+    backgroundColor: '#FFF8E1',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 3,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: '#FFE082',
+  },
+  privateBadgeText: {
+    fontSize: FontSize.xs,
+    color: '#B78103',
+    fontWeight: FontWeight.medium,
+  },
+  deleteCommentBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: Colors.surfaceSecondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 2,
+  },
+  deleteCommentIcon: {
+    fontSize: 12,
+    color: Colors.textTertiary,
+    fontWeight: FontWeight.bold,
+  },
+  commentContent: {
+    fontSize: FontSize.md,
+    color: Colors.textPrimary,
+    lineHeight: 22,
+  },
+  commentContentPrivate: {
+    color: Colors.textPrimary,
   },
 });
