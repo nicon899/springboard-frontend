@@ -15,6 +15,7 @@ import { DIVE_GROUP_NAMES } from '../../app/constants/diveData';
 import {
   api,
   BACKEND_TO_HEIGHT,
+  CommentResponse,
   DiveExecutionResponse,
 } from '../../services/api';
 import {
@@ -32,10 +33,16 @@ interface AddCommentModalProps {
   athleteDives: AthleteTrainingEntry[];
   catalogExecutions?: DiveExecutionResponse[];
   initialDiveId?: string | number | null;
+  commentToEdit?: CommentResponse | null;
   onSave: (data: {
     content: string;
     sharedWithAthlete: boolean;
     athleteDiveStatusId?: number;
+  }) => Promise<void>;
+  onUpdate?: (commentId: number, data: {
+    content: string;
+    sharedWithAthlete: boolean;
+    athleteDiveStatusId?: number | null;
   }) => Promise<void>;
   onClose: () => void;
 }
@@ -48,11 +55,14 @@ export default function AddCommentModal({
   athleteDives,
   catalogExecutions: initialCatalog,
   initialDiveId,
+  commentToEdit,
   onSave,
+  onUpdate,
   onClose,
 }: AddCommentModalProps) {
   const { t, i18n } = useTranslation();
   const isDE = i18n.language === 'de';
+  const isEditing = !!commentToEdit;
 
   const [content, setContent] = useState('');
   const [sharedWithAthlete, setSharedWithAthlete] = useState(true);
@@ -95,29 +105,42 @@ export default function AddCommentModal({
   // Set initial states when modal opens
   useEffect(() => {
     if (visible) {
-      setContent('');
-      setSharedWithAthlete(true);
+      setShowDivePicker(false);
       setDiveSearchQuery('');
       setSelectedHeightFilter('ALL');
       setSelectedGroupFilter(null);
       setOnlyAthleteDivesFilter(athleteDives.length > 0);
-      setShowDivePicker(false);
 
-      if (initialDiveId) {
-        const found = athleteDives.find((d) => d.id === String(initialDiveId));
-        if (found) {
-          setSelectedDiveStatusId(found.id);
+      if (commentToEdit) {
+        setContent(commentToEdit.content || '');
+        setSharedWithAthlete(commentToEdit.sharedWithAthlete ?? true);
+        if (commentToEdit.athleteDiveStatusId) {
+          setSelectedDiveStatusId(String(commentToEdit.athleteDiveStatusId));
           setSelectedCatalogExecution(null);
         } else {
           setSelectedDiveStatusId(null);
           setSelectedCatalogExecution(null);
         }
       } else {
-        setSelectedDiveStatusId(null);
-        setSelectedCatalogExecution(null);
+        setContent('');
+        setSharedWithAthlete(true);
+
+        if (initialDiveId) {
+          const found = athleteDives.find((d) => d.id === String(initialDiveId));
+          if (found) {
+            setSelectedDiveStatusId(found.id);
+            setSelectedCatalogExecution(null);
+          } else {
+            setSelectedDiveStatusId(null);
+            setSelectedCatalogExecution(null);
+          }
+        } else {
+          setSelectedDiveStatusId(null);
+          setSelectedCatalogExecution(null);
+        }
       }
     }
-  }, [visible, initialDiveId, athleteDives]);
+  }, [visible, commentToEdit, initialDiveId, athleteDives]);
 
   // Map of athlete dive execution IDs to AthleteTrainingEntry
   const athleteExecutionMap = useMemo(() => {
@@ -203,7 +226,7 @@ export default function AddCommentModal({
   // Currently selected dive display data
   const currentSelectedDiveInfo = useMemo(() => {
     if (selectedDiveStatusId) {
-      const entry = athleteDives.find((d) => d.id === selectedDiveStatusId);
+      const entry = athleteDives.find((d) => String(d.id) === String(selectedDiveStatusId));
       if (entry) {
         const posName = getPositionName(entry.execution);
         return {
@@ -212,6 +235,19 @@ export default function AddCommentModal({
           name: `${posName} · ${entry.height}`,
           dd: entry.degreeOfDifficulty ? `DD ${entry.degreeOfDifficulty.toFixed(1)}` : '',
           status: entry.status,
+        };
+      }
+      const cat = catalog.find((c) => String(c.id) === String(selectedDiveStatusId));
+      if (cat) {
+        const uiHeight = BACKEND_TO_HEIGHT[cat.height] ?? cat.height;
+        const posName = getPositionName(cat.execution);
+        const title = (isDE ? cat.nameDe : cat.nameEn) || cat.diveCode;
+        return {
+          code: `${cat.diveCode}${cat.execution}`,
+          height: uiHeight,
+          name: title,
+          dd: cat.degreeOfDifficulty ? `DD ${cat.degreeOfDifficulty.toFixed(1)}` : '',
+          status: undefined,
         };
       }
     }
@@ -233,6 +269,7 @@ export default function AddCommentModal({
     selectedDiveStatusId,
     selectedCatalogExecution,
     athleteDives,
+    catalog,
     athleteExecutionMap,
     isDE,
     getPositionName,
@@ -272,11 +309,21 @@ export default function AddCommentModal({
         statusIdToUse = statusRes.id;
       }
 
-      await onSave({
-        content: content.trim(),
-        sharedWithAthlete,
-        athleteDiveStatusId: statusIdToUse,
-      });
+      if (isEditing && commentToEdit) {
+        if (onUpdate) {
+          await onUpdate(commentToEdit.id, {
+            content: content.trim(),
+            sharedWithAthlete,
+            athleteDiveStatusId: statusIdToUse !== undefined ? statusIdToUse : null,
+          });
+        }
+      } else {
+        await onSave({
+          content: content.trim(),
+          sharedWithAthlete,
+          athleteDiveStatusId: statusIdToUse,
+        });
+      }
       onClose();
     } finally {
       setIsSaving(false);
@@ -309,7 +356,9 @@ export default function AddCommentModal({
               ) : (
                 <>
                   <Text style={styles.title}>
-                    {t('trainingStatus.addCommentModalTitle', 'Neuer Kommentar')}
+                    {isEditing
+                      ? t('trainingStatus.editCommentModalTitle', 'Kommentar bearbeiten')
+                      : t('trainingStatus.addCommentModalTitle', 'Neuer Kommentar')}
                   </Text>
                   <Text style={styles.subtitle}>
                     {currentSelectedDiveInfo

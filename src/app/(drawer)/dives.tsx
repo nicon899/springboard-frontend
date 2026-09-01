@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import AddDiveModal from '../../components/modals/AddDiveModal';
+import ConfirmModal from '../../components/modals/ConfirmModal';
 import StatusChangeModal from '../../components/modals/StatusChangeModal';
 import StatusBadge from '../../components/ui/StatusBadge';
 import { useAuth } from '../../context/AuthContext';
@@ -81,10 +82,20 @@ export default function AthleteDivesScreen() {
   });
   const [addDiveModal, setAddDiveModal] = useState(false);
   const [hideNotes, setHideNotes] = useState(false);
-  const [noteModal, setNoteModal] = useState<{ visible: boolean; entryId: string }>({ visible: false, entryId: '' });
+  const [noteModal, setNoteModal] = useState<{ visible: boolean; entryId: string; noteId?: string }>({ visible: false, entryId: '' });
   const [noteText, setNoteText] = useState('');
   const [noteShared, setNoteShared] = useState(true);
   const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
+  const [deleteNoteModal, setDeleteNoteModal] = useState<{
+    visible: boolean;
+    noteId?: string;
+    isDeleting?: boolean;
+  }>({ visible: false });
+  const [deleteDiveModal, setDeleteDiveModal] = useState<{
+    visible: boolean;
+    entryId?: string;
+    isDeleting?: boolean;
+  }>({ visible: false });
 
   const toggleNotes = (entryId: string) => {
     setExpandedNotes((prev) => ({
@@ -299,21 +310,63 @@ export default function AthleteDivesScreen() {
     }
   };
 
-  const handleAddNote = async () => {
-    if (!noteText.trim() || !noteModal.entryId || !targetAthleteId) return;
+  const handleDeleteDive = (entryId: string) => {
+    setStatusModal((s) => ({ ...s, visible: false }));
+    setDeleteDiveModal({ visible: true, entryId });
+  };
+
+  const handleConfirmDeleteDive = async () => {
+    if (!deleteDiveModal.entryId || !targetAthleteId) return;
+    setDeleteDiveModal((prev) => ({ ...prev, isDeleting: true }));
     try {
-      const statusIdNum = Number(noteModal.entryId);
-      await api.createComment(targetAthleteId, {
-        athleteId: Number(targetAthleteId),
-        content: noteText.trim(),
-        sharedWithAthlete: noteShared,
-        athleteDiveStatusId: isNaN(statusIdNum as number) ? undefined : statusIdNum,
-      });
-      setNoteText('');
-      setNoteModal({ visible: false, entryId: '' });
+      await api.deleteAthleteDive(targetAthleteId, deleteDiveModal.entryId);
+      setDeleteDiveModal({ visible: false, isDeleting: false });
       await loadData();
     } catch (e: any) {
-      Alert.alert(t('common.error'), e?.message || 'Failed to add note');
+      setDeleteDiveModal((prev) => ({ ...prev, isDeleting: false }));
+      Alert.alert(t('common.error', 'Fehler'), e?.message || 'Status konnte nicht gelöscht werden');
+    }
+  };
+
+  const handleSaveNote = async () => {
+    if (!noteText.trim() || !noteModal.entryId || !targetAthleteId) return;
+    try {
+      if (noteModal.noteId) {
+        await api.updateComment(targetAthleteId, noteModal.noteId, {
+          content: noteText.trim(),
+          sharedWithAthlete: noteShared,
+        });
+      } else {
+        const statusIdNum = Number(noteModal.entryId);
+        await api.createComment(targetAthleteId, {
+          athleteId: Number(targetAthleteId),
+          content: noteText.trim(),
+          sharedWithAthlete: noteShared,
+          athleteDiveStatusId: isNaN(statusIdNum as number) ? undefined : statusIdNum,
+        });
+      }
+      setNoteText('');
+      setNoteModal({ visible: false, entryId: '', noteId: undefined });
+      await loadData();
+    } catch (e: any) {
+      Alert.alert(t('common.error'), e?.message || 'Failed to save note');
+    }
+  };
+
+  const handleDeleteNote = (noteId: string) => {
+    setDeleteNoteModal({ visible: true, noteId });
+  };
+
+  const handleConfirmDeleteNote = async () => {
+    if (!deleteNoteModal.noteId || !targetAthleteId) return;
+    setDeleteNoteModal((prev) => ({ ...prev, isDeleting: true }));
+    try {
+      await api.deleteComment(targetAthleteId, deleteNoteModal.noteId);
+      setDeleteNoteModal({ visible: false, isDeleting: false });
+      await loadData();
+    } catch (e: any) {
+      setDeleteNoteModal((prev) => ({ ...prev, isDeleting: false }));
+      Alert.alert(t('common.error', 'Fehler'), e?.message || 'Failed to delete note');
     }
   };
 
@@ -375,23 +428,63 @@ export default function AthleteDivesScreen() {
           <View style={styles.notesList}>
             {sortedNotes.map((note) => {
               const isPrivate = !note.sharedWithAthlete;
+              const isAuthor = String(note.authorId) === String(user?.id);
+              const isGlobalAdmin = user?.globalRole === 'ROLE_ADMIN';
+              const canEdit = isAuthor || isGlobalAdmin;
+              const canDelete = isAuthor || isTrainer || isGlobalAdmin;
+
               return (
                 <View
                   key={note.id}
                   style={[styles.noteItem, isPrivate && styles.noteItemPrivate]}
                 >
                   <View style={styles.noteHeader}>
-                    <Text style={[styles.noteAuthor, isPrivate && styles.noteAuthorPrivate]}>
-                      {t('trainingStatus.noteBy', { author: note.authorName })}
-                    </Text>
-                    <Text style={styles.noteDate}>
-                      {new Date(note.createdAt).toLocaleDateString(isDE ? 'de-DE' : 'en-US', { month: 'short', day: 'numeric' })}
-                    </Text>
-                    {isPrivate && (
-                      <View style={styles.privateChip}>
-                        <Text style={styles.privateChipText}>🔒</Text>
-                      </View>
-                    )}
+                    <View style={styles.noteAuthorCol}>
+                      <Text style={[styles.noteAuthor, isPrivate && styles.noteAuthorPrivate]}>
+                        {t('trainingStatus.noteBy', { author: note.authorName })}
+                      </Text>
+                      <Text style={styles.noteDate}>
+                        {new Date(note.createdAt).toLocaleDateString(isDE ? 'de-DE' : 'en-US', { month: 'short', day: 'numeric' })}
+                      </Text>
+                    </View>
+
+                    <View style={styles.noteHeaderRight}>
+                      {isPrivate && (
+                        <View style={styles.privateChip}>
+                          <Text style={styles.privateChipText}>🔒</Text>
+                        </View>
+                      )}
+
+                      {(canEdit || canDelete) && (
+                        <View style={styles.noteActionsGroup}>
+                          {canEdit && (
+                            <TouchableOpacity
+                              style={styles.noteActionBtn}
+                              onPress={() => {
+                                setNoteText(note.text);
+                                setNoteShared(note.sharedWithAthlete);
+                                setNoteModal({ visible: true, entryId: entry.id, noteId: note.id });
+                              }}
+                              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                              accessibilityLabel={t('trainingStatus.editComment', 'Bearbeiten')}
+                            >
+                              <Text style={styles.noteActionIcon}>✏️</Text>
+                            </TouchableOpacity>
+                          )}
+
+                          {canDelete && (
+                            <TouchableOpacity
+                              style={styles.noteActionBtn}
+                              onPress={() => handleDeleteNote(note.id)}
+                              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                              accessibilityLabel={t('trainingStatus.deleteComment', 'Löschen')}
+                            >
+                              <Text style={styles.noteDeleteIcon}>✕</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      )}
+                    </View>
                   </View>
                   <Text style={[styles.noteText, isPrivate && styles.noteTextPrivate]}>{note.text}</Text>
                 </View>
@@ -401,7 +494,11 @@ export default function AthleteDivesScreen() {
             {isTrainer && (
               <TouchableOpacity
                 style={styles.addNoteBtn}
-                onPress={() => setNoteModal({ visible: true, entryId: entry.id })}
+                onPress={() => {
+                  setNoteText('');
+                  setNoteShared(true);
+                  setNoteModal({ visible: true, entryId: entry.id, noteId: undefined });
+                }}
               >
                 <Text style={styles.addNoteBtnText}>+ {t('trainingStatus.addNote')}</Text>
               </TouchableOpacity>
@@ -460,7 +557,11 @@ export default function AthleteDivesScreen() {
                         )}
                         {!hideNotes && isTrainer && (
                           <TouchableOpacity
-                            onPress={() => setNoteModal({ visible: true, entryId: entry.id })}
+                            onPress={() => {
+                              setNoteText('');
+                              setNoteShared(true);
+                              setNoteModal({ visible: true, entryId: entry.id, noteId: undefined });
+                            }}
                             style={styles.inlineAddNoteBtn}
                             activeOpacity={0.6}
                             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -663,6 +764,7 @@ export default function AthleteDivesScreen() {
         currentStatus={statusModal.current}
         currentLearnedAt={statusModal.learnedAt}
         onSelect={handleStatusChange}
+        onDelete={isTrainer && statusModal.entryId ? () => handleDeleteDive(statusModal.entryId) : undefined}
         onClose={() => setStatusModal((s) => ({ ...s, visible: false }))}
       />
 
@@ -681,11 +783,15 @@ export default function AthleteDivesScreen() {
         visible={noteModal.visible}
         transparent
         animationType="slide"
-        onRequestClose={() => setNoteModal({ visible: false, entryId: '' })}
+        onRequestClose={() => setNoteModal({ visible: false, entryId: '', noteId: undefined })}
       >
         <View style={styles.noteOverlay}>
           <View style={styles.noteSheet}>
-            <Text style={styles.noteSheetTitle}>{t('trainingStatus.addNote')}</Text>
+            <Text style={styles.noteSheetTitle}>
+              {noteModal.noteId
+                ? t('trainingStatus.editNoteModalTitle', 'Notiz bearbeiten')
+                : t('trainingStatus.addNote', 'Trainer-Notiz')}
+            </Text>
             <TextInput
               style={styles.noteInput}
               placeholder={t('trainingStatus.notePlaceholder')}
@@ -714,14 +820,14 @@ export default function AthleteDivesScreen() {
                 style={styles.noteCancelBtn}
                 onPress={() => {
                   setNoteText('');
-                  setNoteModal({ visible: false, entryId: '' });
+                  setNoteModal({ visible: false, entryId: '', noteId: undefined });
                 }}
               >
                 <Text style={styles.noteCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.noteSaveBtn, !noteText.trim() && styles.noteSaveBtnDisabled]}
-                onPress={handleAddNote}
+                onPress={handleSaveNote}
                 disabled={!noteText.trim()}
               >
                 <Text style={styles.noteSaveText}>{t('common.save')}</Text>
@@ -730,6 +836,30 @@ export default function AthleteDivesScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Confirm Delete Note Modal */}
+      <ConfirmModal
+        visible={deleteNoteModal.visible}
+        title={t('trainingStatus.deleteNoteConfirmTitle', 'Notiz löschen')}
+        message={t('trainingStatus.deleteNoteConfirmMsg', 'Möchtest du diese Notiz wirklich löschen?')}
+        confirmText={t('common.delete', 'Löschen')}
+        cancelText={t('common.cancel', 'Abbrechen')}
+        isLoading={deleteNoteModal.isDeleting}
+        onConfirm={handleConfirmDeleteNote}
+        onCancel={() => setDeleteNoteModal({ visible: false })}
+      />
+
+      {/* Confirm Delete Dive Modal */}
+      <ConfirmModal
+        visible={deleteDiveModal.visible}
+        title={t('trainingStatus.deleteDiveConfirmTitle', 'Sprung entfernen')}
+        message={t('trainingStatus.deleteDiveConfirmMsg', 'Möchtest du diesen Sprung wirklich aus dem Trainingsplan entfernen?')}
+        confirmText={t('common.delete', 'Löschen')}
+        cancelText={t('common.cancel', 'Abbrechen')}
+        isLoading={deleteDiveModal.isDeleting}
+        onConfirm={handleConfirmDeleteDive}
+        onCancel={() => setDeleteDiveModal({ visible: false })}
+      />
     </View>
   );
 }
@@ -1119,8 +1249,15 @@ const styles = StyleSheet.create({
   noteHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  noteAuthorCol: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: Spacing.xs,
-    marginBottom: 2,
+    flex: 1,
+    flexWrap: 'wrap',
   },
   noteAuthor: {
     fontSize: 11,
@@ -1133,7 +1270,11 @@ const styles = StyleSheet.create({
   noteDate: {
     fontSize: 10,
     color: Colors.textTertiary,
-    flex: 1,
+  },
+  noteHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
   },
   privateChip: {
     backgroundColor: '#FFE082',
@@ -1143,6 +1284,29 @@ const styles = StyleSheet.create({
   },
   privateChipText: {
     fontSize: 9,
+  },
+  noteActionsGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginLeft: 2,
+  },
+  noteActionBtn: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: Colors.surfaceSecondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noteActionIcon: {
+    fontSize: 9,
+    color: Colors.textSecondary,
+  },
+  noteDeleteIcon: {
+    fontSize: 10,
+    color: Colors.textTertiary,
+    fontWeight: FontWeight.bold,
   },
   noteText: {
     fontSize: FontSize.xs,

@@ -157,8 +157,18 @@
     "onlyTrainer": "Nur Trainer",
     "sharedDesc": "Der Sportler kann diesen Kommentar sehen",
     "privateDesc": "Nur für Trainer und Administratoren sichtbar",
+    "editCommentModalTitle": "Kommentar bearbeiten",
+    "editNoteModalTitle": "Notiz bearbeiten",
+    "editComment": "Bearbeiten",
+    "deleteComment": "Löschen",
+    "saveChanges": "Änderungen speichern",
     "deleteCommentConfirmTitle": "Kommentar löschen",
-    "deleteCommentConfirmMsg": "Möchtest du diesen Kommentar wirklich löschen?"
+    "deleteCommentConfirmMsg": "Möchtest du diesen Kommentar wirklich löschen?",
+    "deleteNoteConfirmTitle": "Notiz löschen",
+    "deleteNoteConfirmMsg": "Möchtest du diese Notiz wirklich löschen?",
+    "removeDive": "Aus Trainingsplan entfernen",
+    "deleteDiveConfirmTitle": "Sprung entfernen",
+    "deleteDiveConfirmMsg": "Möchtest du diesen Sprung wirklich aus dem Trainingsplan entfernen?"
   },
   "diveSearch": {
     "title": "Sprungsuche",

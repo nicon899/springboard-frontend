@@ -12,6 +12,7 @@ import {
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import AddCommentModal from '../../components/modals/AddCommentModal';
+import ConfirmModal from '../../components/modals/ConfirmModal';
 import { useAuth } from '../../context/AuthContext';
 import {
   BorderRadius,
@@ -56,6 +57,12 @@ export default function TrainingStatusScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isAddCommentModalVisible, setIsAddCommentModalVisible] = useState(false);
+  const [editingComment, setEditingComment] = useState<CommentResponse | null>(null);
+  const [deleteCommentModal, setDeleteCommentModal] = useState<{
+    visible: boolean;
+    comment?: CommentResponse;
+    isDeleting?: boolean;
+  }>({ visible: false });
   const [commentFilter, setCommentFilter] = useState<CommentFilterType>('ALL');
 
   const loadData = useCallback(async (refresh = false) => {
@@ -199,26 +206,39 @@ export default function TrainingStatusScreen() {
     }
   };
 
+  const handleUpdateComment = async (
+    commentId: number,
+    data: { content: string; sharedWithAthlete: boolean; athleteDiveStatusId?: number | null }
+  ) => {
+    if (!targetAthleteId) return;
+    try {
+      await api.updateComment(targetAthleteId, commentId, {
+        content: data.content,
+        sharedWithAthlete: data.sharedWithAthlete,
+        athleteDiveStatusId: data.athleteDiveStatusId !== undefined ? data.athleteDiveStatusId : null,
+      });
+      await loadData(true);
+    } catch (e: any) {
+      Alert.alert(t('common.error', 'Fehler'), e?.message || 'Failed to update comment');
+      throw e;
+    }
+  };
+
   const handleDeleteComment = (comment: CommentResponse) => {
-    Alert.alert(
-      t('trainingStatus.deleteCommentConfirmTitle', 'Kommentar löschen'),
-      t('trainingStatus.deleteCommentConfirmMsg', 'Möchtest du diesen Kommentar wirklich löschen?'),
-      [
-        { text: t('common.cancel', 'Abbrechen'), style: 'cancel' },
-        {
-          text: t('common.delete', 'Löschen'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await api.deleteComment(targetAthleteId, comment.id);
-              await loadData(true);
-            } catch (e: any) {
-              Alert.alert(t('common.error', 'Fehler'), e?.message || 'Failed to delete comment');
-            }
-          },
-        },
-      ]
-    );
+    setDeleteCommentModal({ visible: true, comment });
+  };
+
+  const handleConfirmDeleteComment = async () => {
+    if (!deleteCommentModal.comment || !targetAthleteId) return;
+    setDeleteCommentModal((prev) => ({ ...prev, isDeleting: true }));
+    try {
+      await api.deleteComment(targetAthleteId, deleteCommentModal.comment.id);
+      setDeleteCommentModal({ visible: false, isDeleting: false });
+      await loadData(true);
+    } catch (e: any) {
+      setDeleteCommentModal((prev) => ({ ...prev, isDeleting: false }));
+      Alert.alert(t('common.error', 'Fehler'), e?.message || 'Failed to delete comment');
+    }
   };
 
   const navParams = useMemo(() => {
@@ -442,6 +462,10 @@ export default function TrainingStatusScreen() {
                     ? athleteDiveStatusMap.get(comment.athleteDiveStatusId)
                     : undefined;
                   const isPrivate = !comment.sharedWithAthlete;
+                  const isAuthor = String(comment.authorId) === String(user?.id);
+                  const isGlobalAdmin = user?.globalRole === 'ROLE_ADMIN';
+                  const canEdit = isAuthor || isGlobalAdmin;
+                  const canDelete = isAuthor || isTrainer || isGlobalAdmin;
 
                   const dateFormatted = new Date(comment.createdAt).toLocaleDateString(
                     isDE ? 'de-DE' : 'en-US',
@@ -495,7 +519,7 @@ export default function TrainingStatusScreen() {
                           )}
 
                           {/* Privat-Badge */}
-                          {isPrivate && isTrainer && (
+                          {isPrivate && (isTrainer || isAuthor) && (
                             <View style={styles.privateBadge}>
                               <Text style={styles.privateBadgeText}>
                                 🔒 {t('trainingStatus.onlyTrainer', 'Nur Trainer')}
@@ -503,15 +527,34 @@ export default function TrainingStatusScreen() {
                             </View>
                           )}
 
-                          {/* Löschen Button (Trainer/Admin) */}
-                          {isTrainer && (
-                            <TouchableOpacity
-                              style={styles.deleteCommentBtn}
-                              onPress={() => handleDeleteComment(comment)}
-                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                            >
-                              <Text style={styles.deleteCommentIcon}>✕</Text>
-                            </TouchableOpacity>
+                          {/* Aktionen (Bearbeiten / Löschen) */}
+                          {(canEdit || canDelete) && (
+                            <View style={styles.commentActionsGroup}>
+                              {canEdit && (
+                                <TouchableOpacity
+                                  style={styles.editCommentBtn}
+                                  onPress={() => {
+                                    setEditingComment(comment);
+                                    setIsAddCommentModalVisible(true);
+                                  }}
+                                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                  accessibilityLabel={t('trainingStatus.editComment', 'Bearbeiten')}
+                                >
+                                  <Text style={styles.editCommentIcon}>✏️</Text>
+                                </TouchableOpacity>
+                              )}
+
+                              {canDelete && (
+                                <TouchableOpacity
+                                  style={styles.deleteCommentBtn}
+                                  onPress={() => handleDeleteComment(comment)}
+                                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                  accessibilityLabel={t('trainingStatus.deleteComment', 'Löschen')}
+                                >
+                                  <Text style={styles.deleteCommentIcon}>✕</Text>
+                                </TouchableOpacity>
+                              )}
+                            </View>
                           )}
                         </View>
                       </View>
@@ -529,14 +572,31 @@ export default function TrainingStatusScreen() {
         </>
       )}
 
-      {/* Modal zum Hinzufügen eines Kommentars */}
+      {/* Modal zum Hinzufügen / Bearbeiten eines Kommentars */}
       <AddCommentModal
         visible={isAddCommentModalVisible}
         athleteId={targetAthleteId}
         athleteDives={entries}
         catalogExecutions={catalogExecutions}
+        commentToEdit={editingComment}
         onSave={handleCreateComment}
-        onClose={() => setIsAddCommentModalVisible(false)}
+        onUpdate={handleUpdateComment}
+        onClose={() => {
+          setIsAddCommentModalVisible(false);
+          setEditingComment(null);
+        }}
+      />
+
+      {/* Confirm Delete Comment Modal */}
+      <ConfirmModal
+        visible={deleteCommentModal.visible}
+        title={t('trainingStatus.deleteCommentConfirmTitle', 'Kommentar löschen')}
+        message={t('trainingStatus.deleteCommentConfirmMsg', 'Möchtest du diesen Kommentar wirklich löschen?')}
+        confirmText={t('common.delete', 'Löschen')}
+        cancelText={t('common.cancel', 'Abbrechen')}
+        isLoading={deleteCommentModal.isDeleting}
+        onConfirm={handleConfirmDeleteComment}
+        onCancel={() => setDeleteCommentModal({ visible: false })}
       />
     </ScrollView>
   );
@@ -860,6 +920,24 @@ const styles = StyleSheet.create({
     color: '#B78103',
     fontWeight: FontWeight.medium,
   },
+  commentActionsGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    marginLeft: 4,
+  },
+  editCommentBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: Colors.surfaceSecondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editCommentIcon: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+  },
   deleteCommentBtn: {
     width: 24,
     height: 24,
@@ -867,7 +945,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceSecondary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 2,
   },
   deleteCommentIcon: {
     fontSize: 12,

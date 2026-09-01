@@ -25,6 +25,7 @@ interface StatusChangeModalProps {
   currentStatus: DiveStatus;
   currentLearnedAt?: string | null;
   onSelect: (status: DiveStatus, learnedAt?: string | null) => void;
+  onDelete?: () => void;
   onClose: () => void;
 }
 
@@ -93,6 +94,7 @@ export default function StatusChangeModal({
   currentStatus,
   currentLearnedAt,
   onSelect,
+  onDelete,
   onClose,
 }: StatusChangeModalProps) {
   const { t, i18n } = useTranslation();
@@ -242,6 +244,20 @@ export default function StatusChangeModal({
               <Text style={styles.saveLabel}>{t('common.save')}</Text>
             </TouchableOpacity>
           </View>
+
+          {onDelete && (
+            <View style={styles.deleteSection}>
+              <TouchableOpacity
+                style={styles.deleteDiveBtn}
+                onPress={onDelete}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.deleteDiveLabel}>
+                  🗑️ {t('trainingStatus.removeDive', 'Aus Trainingsplan entfernen')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </View>
     </Modal>
@@ -381,5 +397,21 @@ const styles = StyleSheet.create({
     fontSize: FontSize.md,
     color: Colors.surface,
     fontWeight: FontWeight.bold,
+  },
+  deleteSection: {
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: Colors.borderLight,
+    alignItems: 'center',
+  },
+  deleteDiveBtn: {
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+  },
+  deleteDiveLabel: {
+    fontSize: FontSize.sm,
+    color: '#D32F2F',
+    fontWeight: FontWeight.medium,
   },
 });

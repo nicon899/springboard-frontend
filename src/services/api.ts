@@ -190,6 +190,7 @@ export interface CreateCommentRequest {
 export interface UpdateCommentRequest {
   content: string;
   sharedWithAthlete: boolean;
+  athleteDiveStatusId?: number;
 }
 
 // ── Age Categories (Altersklassen) ──
