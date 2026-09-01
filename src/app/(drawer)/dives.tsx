@@ -1,4 +1,6 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Alert,
   Modal,
@@ -9,12 +11,11 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
-import { useTranslation } from 'react-i18next';
-import { useAuth } from '../../context/AuthContext';
-import StatusBadge from '../../components/ui/StatusBadge';
-import StatusChangeModal from '../../components/modals/StatusChangeModal';
 import AddDiveModal from '../../components/modals/AddDiveModal';
+import StatusChangeModal from '../../components/modals/StatusChangeModal';
+import StatusBadge from '../../components/ui/StatusBadge';
+import { useAuth } from '../../context/AuthContext';
+import { DIVE_GROUP_NAMES } from '../constants/diveData';
 import {
   BorderRadius,
   Colors,
@@ -24,12 +25,11 @@ import {
   Spacing,
 } from '../constants/theme';
 import { AthleteTrainingEntry, DiveHeight, DiveStatus, TrainerNote } from '../types/dive';
-import { DIVE_GROUP_NAMES } from '../constants/diveData';
 
 import {
   api,
-  BACKEND_TO_HEIGHT,
   AthleteDiveStatusResponse,
+  BACKEND_TO_HEIGHT,
   CommentResponse,
   DiveExecutionResponse,
 } from '../../services/api';
@@ -171,10 +171,10 @@ export default function AthleteDivesScreen() {
   const getPositionName = useCallback((pos?: string) => {
     if (!pos) return '';
     switch (pos) {
-      case 'A': return t('diveSearch.positionA');
-      case 'B': return t('diveSearch.positionB');
-      case 'C': return t('diveSearch.positionC');
-      case 'D': return t('diveSearch.positionD');
+      case 'A': return t('routines.positions.A');
+      case 'B': return t('routines.positions.B');
+      case 'C': return t('routines.positions.C');
+      case 'D': return t('routines.positions.D');
       default: return pos;
     }
   }, [t]);
@@ -332,9 +332,9 @@ export default function AthleteDivesScreen() {
     const latestNote = sortedNotes[0];
     const latestDateFormatted = latestNote?.createdAt
       ? new Date(latestNote.createdAt).toLocaleDateString(isDE ? 'de-DE' : 'en-US', {
-          day: 'numeric',
-          month: 'short',
-        })
+        day: 'numeric',
+        month: 'short',
+      })
       : '';
 
     return (
@@ -363,22 +363,30 @@ export default function AthleteDivesScreen() {
 
         {isExpanded && (
           <View style={styles.notesList}>
-            {sortedNotes.map((note) => (
-              <View key={note.id} style={styles.noteItem}>
-                <View style={styles.noteHeader}>
-                  <Text style={styles.noteAuthor}>{t('trainingStatus.noteBy', { author: note.authorName })}</Text>
-                  <Text style={styles.noteDate}>
-                    {new Date(note.createdAt).toLocaleDateString(isDE ? 'de-DE' : 'en-US', { month: 'short', day: 'numeric' })}
-                  </Text>
-                  {!note.sharedWithAthlete && (
-                    <View style={styles.privateChip}>
-                      <Text style={styles.privateChipText}>🔒</Text>
-                    </View>
-                  )}
+            {sortedNotes.map((note) => {
+              const isPrivate = !note.sharedWithAthlete;
+              return (
+                <View
+                  key={note.id}
+                  style={[styles.noteItem, isPrivate && styles.noteItemPrivate]}
+                >
+                  <View style={styles.noteHeader}>
+                    <Text style={[styles.noteAuthor, isPrivate && styles.noteAuthorPrivate]}>
+                      {t('trainingStatus.noteBy', { author: note.authorName })}
+                    </Text>
+                    <Text style={styles.noteDate}>
+                      {new Date(note.createdAt).toLocaleDateString(isDE ? 'de-DE' : 'en-US', { month: 'short', day: 'numeric' })}
+                    </Text>
+                    {isPrivate && (
+                      <View style={styles.privateChip}>
+                        <Text style={styles.privateChipText}>🔒</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={[styles.noteText, isPrivate && styles.noteTextPrivate]}>{note.text}</Text>
                 </View>
-                <Text style={styles.noteText}>{note.text}</Text>
-              </View>
-            ))}
+              );
+            })}
 
             {isTrainer && (
               <TouchableOpacity
@@ -910,6 +918,12 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceSecondary,
     padding: Spacing.xs,
     borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+  },
+  noteItemPrivate: {
+    backgroundColor: '#FFF8E6',
+    borderColor: '#FFE082',
   },
   noteHeader: {
     flexDirection: 'row',
@@ -922,16 +936,19 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.semiBold,
     color: Colors.textPrimary,
   },
+  noteAuthorPrivate: {
+    color: '#8D4F00',
+  },
   noteDate: {
     fontSize: 10,
     color: Colors.textTertiary,
     flex: 1,
   },
   privateChip: {
-    backgroundColor: Colors.border,
-    paddingHorizontal: 4,
+    backgroundColor: '#FFE082',
+    paddingHorizontal: 5,
     paddingVertical: 1,
-    borderRadius: 3,
+    borderRadius: 4,
   },
   privateChipText: {
     fontSize: 9,
@@ -939,6 +956,9 @@ const styles = StyleSheet.create({
   noteText: {
     fontSize: FontSize.xs,
     color: Colors.textPrimary,
+  },
+  noteTextPrivate: {
+    color: '#3E2723',
   },
   addNoteBtn: {
     paddingVertical: 3,
