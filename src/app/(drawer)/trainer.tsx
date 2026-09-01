@@ -22,17 +22,21 @@ import {
 } from '../constants/theme';
 import { AthleteListItem } from '../types/user';
 
-import { api } from '../../services/api';
+import { useClubMembers } from '../../hooks/useDataStore';
+import { dataStore } from '../../services/dataStore';
 
 type FilterCategory = 'ALL' | 'YOUTH' | 'COMPETITIVE';
 
 export default function TrainerScreen() {
   const { t } = useTranslation();
-  const { user, activeClubMembership, isTrainerOrAdmin } = useAuth();
+  const { user, activeClubId, activeClubMembership, isTrainerOrAdmin } = useAuth();
   const router = useRouter();
 
+  const clubId = activeClubId || activeClubMembership?.clubId;
+  const { members, unreadCounts, isLoading: isMembersLoading, refresh: refreshMembers } = useClubMembers(clubId);
+
   const [athletes, setAthletes] = useState<AthleteListItem[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<FilterCategory>('ALL');
 
@@ -43,16 +47,14 @@ export default function TrainerScreen() {
     }
   }, [user, isTrainerOrAdmin]);
 
-  const loadAthletes = useCallback(async () => {
-    if (!activeClubMembership?.clubId) return;
-    setIsLoading(true);
-    try {
-      const [members, unreadCounts] = await Promise.all([
-        api.getClubMembers(activeClubMembership.clubId),
-        api.getClubCommentsUnreadCounts(activeClubMembership.clubId).catch(() => ({} as Record<string, number>)),
-      ]);
+  const syncAthletesFromMembers = useCallback(async () => {
+    if (!members || members.length === 0) {
+      setAthletes([]);
+      return;
+    }
 
-      // Load athlete profiles and dive stats
+    setIsProcessing(true);
+    try {
       const athleteItems: AthleteListItem[] = await Promise.all(
         members.map(async (m) => {
           let age = 18;
@@ -60,17 +62,25 @@ export default function TrainerScreen() {
           let lastName = m.userFullName?.split(' ').slice(1).join(' ') || '';
           let masteredDiveCount = 0;
 
-          try {
-            const profile = await api.getUserById(m.userId);
+          // Try cached profile or fetch async
+          let profile = dataStore.getUserProfile(m.userId);
+          if (!profile) {
+            profile = await dataStore.fetchUserProfileAsync(m.userId);
+          }
+          if (profile) {
             if (profile.firstName) firstName = profile.firstName;
             if (profile.lastName) lastName = profile.lastName;
             if (profile.age != null) age = profile.age;
-          } catch {}
+          }
 
-          try {
-            const dives = await api.getAthleteDives(m.userId);
-            masteredDiveCount = dives.filter((d) => d.status === 'MASTERED').length;
-          } catch {}
+          // Get cached dive stats or fetch async
+          const divesResult = dataStore.getAthleteDivesSnapshot(m.userId);
+          if (divesResult.data.length > 0) {
+            masteredDiveCount = divesResult.data.filter((d) => d.status === 'MASTERED').length;
+          } else {
+            const fetchedDives = await dataStore.fetchAthleteDivesAsync(m.userId);
+            masteredDiveCount = fetchedDives.filter((d) => d.status === 'MASTERED').length;
+          }
 
           const category: 'YOUTH' | 'COMPETITIVE' = age < 16 ? 'YOUTH' : 'COMPETITIVE';
           const unreadCount = Number(unreadCounts[m.userId] ?? unreadCounts[String(m.userId)] ?? 0);
@@ -89,17 +99,25 @@ export default function TrainerScreen() {
 
       setAthletes(athleteItems);
     } catch (e) {
-      console.warn('Failed to load athletes for club:', e);
+      console.warn('Failed to sync athletes from members:', e);
     } finally {
-      setIsLoading(false);
+      setIsProcessing(false);
     }
-  }, [activeClubMembership?.clubId]);
+  }, [members, unreadCounts]);
+
+  useEffect(() => {
+    syncAthletesFromMembers();
+  }, [syncAthletesFromMembers]);
 
   useFocusEffect(
     useCallback(() => {
-      loadAthletes();
-    }, [loadAthletes])
+      if (clubId) {
+        refreshMembers();
+      }
+    }, [clubId, refreshMembers])
   );
+
+  const isLoading = (isMembersLoading || isProcessing) && athletes.length === 0;
 
   const filteredAthletes = useMemo(() => {
     let list = athletes;
@@ -222,8 +240,8 @@ export default function TrainerScreen() {
         keyExtractor={(a) => a.id}
         renderItem={renderAthlete}
         contentContainerStyle={styles.listContent}
-        refreshing={isLoading}
-        onRefresh={loadAthletes}
+        refreshing={isMembersLoading}
+        onRefresh={refreshMembers}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>{t('trainer.noAthletes')}</Text>

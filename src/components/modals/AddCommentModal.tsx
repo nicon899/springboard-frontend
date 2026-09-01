@@ -18,6 +18,7 @@ import {
   CommentResponse,
   DiveExecutionResponse,
 } from '../../services/api';
+import { dataStore } from '../../services/dataStore';
 import {
   BorderRadius,
   Colors,
@@ -302,10 +303,11 @@ export default function AddCommentModal({
       if (selectedDiveStatusId) {
         statusIdToUse = Number(selectedDiveStatusId);
       } else if (selectedCatalogExecution) {
-        const statusRes = await api.updateAthleteDive(athleteId, {
-          diveExecutionId: selectedCatalogExecution.id,
-          status: 'PLANNED',
-        });
+        const statusRes = await dataStore.updateAthleteDiveStatus(
+          athleteId,
+          selectedCatalogExecution.id,
+          'PLANNED'
+        );
         statusIdToUse = statusRes.id;
       }
 

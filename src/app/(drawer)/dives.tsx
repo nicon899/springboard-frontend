@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useRouter, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -48,24 +48,45 @@ interface GroupedStatusDive {
   entries: AthleteTrainingEntry[];
 }
 
+import {
+  useDiveCatalog,
+  useAthleteDives,
+  useAthleteComments,
+} from '../../hooks/useDataStore';
+
 export default function AthleteDivesScreen() {
   const { t, i18n } = useTranslation();
-  const { user, isTrainerOrAdmin } = useAuth();
+  const { user, activeClubId, activeClubMembership, isTrainerOrAdmin } = useAuth();
   const params = useLocalSearchParams<{ athleteId?: string; athleteName?: string; height?: string }>();
   const navigation = useNavigation();
   const router = useRouter();
 
   const isTrainer = isTrainerOrAdmin();
-  const targetAthleteId = params.athleteId ?? user?.id ?? '';
-  const viewingAthlete = params.athleteId && params.athleteId !== user?.id;
+  const targetAthleteIdNum = params.athleteId ? Number(params.athleteId) : (user?.id ? Number(user.id) : 0);
+  const targetAthleteId = targetAthleteIdNum ? String(targetAthleteIdNum) : '';
+  const viewingAthlete = params.athleteId && String(params.athleteId) !== String(user?.id);
   const athleteLabel = params.athleteName ?? t('trainingStatus.myTraining');
+  const clubId = activeClubId || activeClubMembership?.clubId;
+
+  const { executions: catalogExecutions } = useDiveCatalog();
+  const {
+    dives: rawAthleteDives,
+    isLoading: isDivesLoading,
+    refresh: refreshDives,
+    updateStatus,
+  } = useAthleteDives(targetAthleteIdNum);
+  const {
+    comments: rawComments,
+    refresh: refreshComments,
+    createComment,
+    updateComment,
+    deleteComment,
+  } = useAthleteComments(targetAthleteIdNum, clubId);
 
   const [selectedHeight, setSelectedHeight] = useState<DiveHeight>((params.height as DiveHeight) || '1m');
   const [selectedGroup, setSelectedGroup] = useState<number | null>(null);
   const [heightDropdownOpen, setHeightDropdownOpen] = useState(false);
-  const [entries, setEntries] = useState<AthleteTrainingEntry[]>([]);
-  const [catalogExecutions, setCatalogExecutions] = useState<DiveExecutionResponse[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const isLoading = isDivesLoading && rawAthleteDives.length === 0;
 
   // Modals
   const [statusModal, setStatusModal] = useState<{
@@ -119,56 +140,43 @@ export default function AthleteDivesScreen() {
     }
   };
 
-  // Load catalog executions & athlete dives from API
-  const loadData = useCallback(async () => {
-    if (!targetAthleteId) return;
-    setIsLoading(true);
-    try {
-      const [divesRes, commentsRes, catalogRes] = await Promise.all([
-        api.getAthleteDives(targetAthleteId).catch(() => [] as AthleteDiveStatusResponse[]),
-        api.getAthleteComments(targetAthleteId).catch(() => [] as CommentResponse[]),
-        api.getAllDiveExecutions().catch(() => [] as DiveExecutionResponse[]),
-      ]);
+  // Map raw athlete dives and comments into UI entries
+  const entries: AthleteTrainingEntry[] = useMemo(() => {
+    return rawAthleteDives.map((d) => {
+      const diveNotes: TrainerNote[] = rawComments
+        .filter((c) => c.athleteDiveStatusId != null && Number(c.athleteDiveStatusId) === Number(d.id))
+        .map((c) => ({
+          id: String(c.id),
+          text: c.content,
+          authorId: String(c.authorId),
+          authorName: c.authorName || 'Trainer',
+          createdAt: c.createdAt,
+          sharedWithAthlete: c.sharedWithAthlete,
+        }));
 
-      setCatalogExecutions(catalogRes);
+      return {
+        id: String(d.id),
+        athleteId: String(d.athleteId),
+        diveCode: d.diveCode,
+        execution: d.execution,
+        degreeOfDifficulty: d.degreeOfDifficulty,
+        diveExecutionId: d.diveExecutionId,
+        height: BACKEND_TO_HEIGHT[d.height] || '1m',
+        status: d.status,
+        learnedAt: d.learnedAt ?? null,
+        notes: diveNotes,
+      };
+    });
+  }, [rawAthleteDives, rawComments]);
 
-      const mappedEntries: AthleteTrainingEntry[] = divesRes.map((d) => {
-        const diveNotes: TrainerNote[] = commentsRes
-          .filter((c) => c.athleteDiveStatusId === d.id)
-          .map((c) => ({
-            id: String(c.id),
-            text: c.content,
-            authorId: String(c.authorId),
-            authorName: c.authorName || 'Trainer',
-            createdAt: c.createdAt,
-            sharedWithAthlete: c.sharedWithAthlete,
-          }));
-
-        return {
-          id: String(d.id),
-          athleteId: String(d.athleteId),
-          diveCode: d.diveCode,
-          execution: d.execution,
-          degreeOfDifficulty: d.degreeOfDifficulty,
-          diveExecutionId: d.diveExecutionId,
-          height: BACKEND_TO_HEIGHT[d.height] || '1m',
-          status: d.status,
-          learnedAt: d.learnedAt ?? null,
-          notes: diveNotes,
-        };
-      });
-
-      setEntries(mappedEntries);
-    } catch (e: any) {
-      console.warn('Failed to load training status data:', e);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [targetAthleteId]);
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  useFocusEffect(
+    useCallback(() => {
+      if (targetAthleteIdNum) {
+        refreshDives();
+        refreshComments();
+      }
+    }, [targetAthleteIdNum, refreshDives, refreshComments])
+  );
 
   // Set navigation header title
   useEffect(() => {
@@ -226,19 +234,27 @@ export default function AthleteDivesScreen() {
 
     currentEntries.forEach((entry) => {
       const diveDef = getDiveDefinition(entry.diveCode);
-      let group = statusMaps[entry.status].get(entry.diveCode);
+      const rawStatus = (entry.status || 'PLANNED').toUpperCase();
+      const statusKey: DiveStatus =
+        rawStatus === 'MASTERED'
+          ? 'MASTERED'
+          : rawStatus === 'LEARNING' || rawStatus === 'LEARNED'
+          ? 'LEARNING'
+          : 'PLANNED';
+
+      let group = statusMaps[statusKey]?.get(entry.diveCode);
       if (!group) {
         group = {
-          key: `${entry.status}_${entry.diveCode}`,
+          key: `${statusKey}_${entry.diveCode}`,
           diveCode: entry.diveCode,
-          groupNumber: diveDef?.groupNumber || 1,
+          groupNumber: diveDef?.groupNumber || (parseInt(entry.diveCode?.charAt(0), 10) || 1),
           nameDe: diveDef?.nameDe || entry.diveCode,
           nameEn: diveDef?.nameEn || entry.diveCode,
-          status: entry.status,
+          status: statusKey,
           entries: [],
         };
-        statusMaps[entry.status].set(entry.diveCode, group);
-        result[entry.status].push(group);
+        statusMaps[statusKey]?.set(entry.diveCode, group);
+        result[statusKey]?.push(group);
       }
       group.entries.push(entry);
     });
@@ -254,7 +270,7 @@ export default function AthleteDivesScreen() {
 
   const handleStatusChange = async (status: DiveStatus, learnedAt?: string | null) => {
     const targetEntry = entries.find((e) => e.id === statusModal.entryId);
-    if (!targetEntry || !targetAthleteId) return;
+    if (!targetEntry || !targetAthleteIdNum) return;
 
     setStatusModal((s) => ({ ...s, visible: false }));
 
@@ -265,46 +281,31 @@ export default function AthleteDivesScreen() {
     }
 
     try {
-      await api.updateAthleteDive(targetAthleteId, {
-        diveExecutionId,
-        status,
-        learnedAt: status === 'MASTERED' ? learnedAt : null,
-      });
-      await loadData();
+      await updateStatus(diveExecutionId, status, status === 'MASTERED' ? learnedAt : null);
     } catch (e: any) {
       Alert.alert(t('common.error'), e?.message || 'Failed to update dive status');
     }
   };
 
   const handleAddDive = async (execution: DiveExecutionResponse, status: DiveStatus = 'PLANNED') => {
-    if (!targetAthleteId) return;
+    if (!targetAthleteIdNum) return;
     try {
       const learnedAt = status === 'MASTERED' ? new Date().toISOString().split('T')[0] : null;
-      await api.updateAthleteDive(targetAthleteId, {
-        diveExecutionId: execution.id,
-        status,
-        learnedAt,
-      });
-      await loadData();
+      await updateStatus(execution.id, status, learnedAt);
     } catch (e: any) {
       Alert.alert(t('common.error'), e?.message || 'Failed to add dive to training plan');
     }
   };
 
   const handleAddMultipleDives = async (executions: DiveExecutionResponse[], status: DiveStatus = 'PLANNED') => {
-    if (!targetAthleteId || executions.length === 0) return;
+    if (!targetAthleteIdNum || executions.length === 0) return;
     try {
       const learnedAt = status === 'MASTERED' ? new Date().toISOString().split('T')[0] : null;
       await Promise.all(
         executions.map((execution) =>
-          api.updateAthleteDive(targetAthleteId, {
-            diveExecutionId: execution.id,
-            status,
-            learnedAt,
-          })
+          updateStatus(execution.id, status, learnedAt)
         )
       );
-      await loadData();
     } catch (e: any) {
       Alert.alert(t('common.error'), e?.message || 'Failed to add dives to training plan');
     }
@@ -321,7 +322,7 @@ export default function AthleteDivesScreen() {
     try {
       await api.deleteAthleteDive(targetAthleteId, deleteDiveModal.entryId);
       setDeleteDiveModal({ visible: false, isDeleting: false });
-      await loadData();
+      await refreshDives();
     } catch (e: any) {
       setDeleteDiveModal((prev) => ({ ...prev, isDeleting: false }));
       Alert.alert(t('common.error', 'Fehler'), e?.message || 'Status konnte nicht gelöscht werden');
@@ -329,17 +330,17 @@ export default function AthleteDivesScreen() {
   };
 
   const handleSaveNote = async () => {
-    if (!noteText.trim() || !noteModal.entryId || !targetAthleteId) return;
+    if (!noteText.trim() || !noteModal.entryId || !targetAthleteIdNum) return;
     try {
       if (noteModal.noteId) {
-        await api.updateComment(targetAthleteId, noteModal.noteId, {
+        await updateComment(Number(noteModal.noteId), {
           content: noteText.trim(),
           sharedWithAthlete: noteShared,
         });
       } else {
         const statusIdNum = Number(noteModal.entryId);
-        await api.createComment(targetAthleteId, {
-          athleteId: Number(targetAthleteId),
+        await createComment({
+          athleteId: targetAthleteIdNum,
           content: noteText.trim(),
           sharedWithAthlete: noteShared,
           athleteDiveStatusId: isNaN(statusIdNum as number) ? undefined : statusIdNum,
@@ -347,7 +348,6 @@ export default function AthleteDivesScreen() {
       }
       setNoteText('');
       setNoteModal({ visible: false, entryId: '', noteId: undefined });
-      await loadData();
     } catch (e: any) {
       Alert.alert(t('common.error'), e?.message || 'Failed to save note');
     }
@@ -358,15 +358,14 @@ export default function AthleteDivesScreen() {
   };
 
   const handleConfirmDeleteNote = async () => {
-    if (!deleteNoteModal.noteId || !targetAthleteId) return;
+    if (!deleteNoteModal.noteId) return;
     setDeleteNoteModal((prev) => ({ ...prev, isDeleting: true }));
     try {
-      await api.deleteComment(targetAthleteId, deleteNoteModal.noteId);
+      await deleteComment(Number(deleteNoteModal.noteId));
       setDeleteNoteModal({ visible: false, isDeleting: false });
-      await loadData();
     } catch (e: any) {
       setDeleteNoteModal((prev) => ({ ...prev, isDeleting: false }));
-      Alert.alert(t('common.error', 'Fehler'), e?.message || 'Failed to delete note');
+      Alert.alert(t('common.error', 'Fehler'), e?.message || 'Notiz konnte nicht gelöscht werden');
     }
   };
 

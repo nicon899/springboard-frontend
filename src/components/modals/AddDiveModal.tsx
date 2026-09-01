@@ -42,6 +42,8 @@ interface GroupedDive {
 
 const ALL_STATUSES: DiveStatus[] = ['PLANNED', 'LEARNING', 'MASTERED'];
 
+import { useDiveCatalog } from '../../hooks/useDataStore';
+
 export default function AddDiveModal({
   visible,
   height,
@@ -54,12 +56,14 @@ export default function AddDiveModal({
   const { t, i18n } = useTranslation();
   const isDE = i18n.language === 'de';
 
+  const { executions: cachedCatalog } = useDiveCatalog();
+  const catalog = initialCatalog && initialCatalog.length > 0 ? initialCatalog : cachedCatalog;
+
   const [query, setQuery] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [multiAdd, setMultiAdd] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<DiveStatus>('PLANNED');
   const [selectedExecutions, setSelectedExecutions] = useState<Map<number, DiveExecutionResponse>>(new Map());
-  const [catalog, setCatalog] = useState<DiveExecutionResponse[]>(initialCatalog || []);
 
   // Immer beim Öffnen des Modals alle Auswahl-Zustände garantiert zurücksetzen
   useEffect(() => {
@@ -71,31 +75,6 @@ export default function AddDiveModal({
       setIsFocused(false);
     }
   }, [visible]);
-
-  // Katalog laden
-  useEffect(() => {
-    if (initialCatalog && initialCatalog.length > 0) {
-      setCatalog(initialCatalog);
-      return;
-    }
-    let isMounted = true;
-    async function loadCatalog() {
-      try {
-        const apiExecutions = await api.getAllDiveExecutions();
-        if (isMounted && apiExecutions && apiExecutions.length > 0) {
-          setCatalog(apiExecutions);
-        }
-      } catch (e) {
-        console.warn('Failed to load dives from API in AddDiveModal:', e);
-      }
-    }
-    if (visible) {
-      loadCatalog();
-    }
-    return () => {
-      isMounted = false;
-    };
-  }, [visible, initialCatalog]);
 
   const handleClose = useCallback(() => {
     setMultiAdd(false);

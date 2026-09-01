@@ -84,17 +84,29 @@ function specToForm(spec: RoutineSpecificationResponse): SpecFormData {
 // ────────────────────────────────────────────────────────────
 
 export default function RoutineSpecificationsScreen() {
-  const { t, i18n } = useTranslation();
-  const isDE = i18n.language === 'de';
+  const { t } = useTranslation();
   const router = useRouter();
   const { activeClubId, activeClubMembership, isTrainerOrAdmin } = useAuth();
 
   const canEdit = isTrainerOrAdmin();
-  const clubId = activeClubId;
+  const clubIdNum = activeClubId ? Number(activeClubId) : 0;
 
-  const [specs, setSpecs] = useState<RoutineSpecificationResponse[]>([]);
-  const [ageCategories, setAgeCategories] = useState<AgeCategoryResponse[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const {
+    specifications: specs,
+    isLoading: isSpecsLoading,
+    refresh: refreshSpecs,
+    createSpecification,
+    updateSpecification,
+    deleteSpecification,
+  } = useClubSpecifications(clubIdNum);
+
+  const {
+    categories: ageCategories,
+    isLoading: isCatsLoading,
+    refresh: refreshCats,
+  } = useClubAgeCategories(clubIdNum);
+
+  const isLoading = isSpecsLoading && isCatsLoading && specs.length === 0;
 
   const [modalVisible, setModalVisible] = useState(false);
   const [editingSpec, setEditingSpec] = useState<RoutineSpecificationResponse | null>(null);
@@ -123,21 +135,9 @@ export default function RoutineSpecificationsScreen() {
 
   // ── Daten laden ──
   const loadData = useCallback(async () => {
-    if (!clubId) return;
-    setIsLoading(true);
-    try {
-      const [specData, catData] = await Promise.all([
-        api.getSpecificationsByClub(clubId).catch(() => [] as RoutineSpecificationResponse[]),
-        api.getAgeCategoriesByClub(clubId).catch(() => [] as AgeCategoryResponse[]),
-      ]);
-      setSpecs(specData);
-      setAgeCategories(catData);
-    } catch (e: any) {
-      console.warn('Failed to load specs:', e);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [clubId]);
+    if (!clubIdNum) return;
+    await Promise.all([refreshSpecs(), refreshCats()]);
+  }, [clubIdNum, refreshSpecs, refreshCats]);
 
   useEffect(() => {
     loadData();
@@ -160,11 +160,11 @@ export default function RoutineSpecificationsScreen() {
 
   // ── Speichern ──
   const handleSave = async () => {
-    if (!clubId) return;
+    if (!clubIdNum) return;
     setIsSaving(true);
     try {
       const payload: CreateRoutineSpecificationRequest = {
-        clubId: Number(clubId),
+        clubId: clubIdNum,
         name: form.name || undefined,
         numberOfDives: form.numberOfDives ? Number(form.numberOfDives) : undefined,
         numberOfGroups: form.numberOfGroups ? Number(form.numberOfGroups) : undefined,
@@ -176,7 +176,7 @@ export default function RoutineSpecificationsScreen() {
       };
 
       if (editingSpec) {
-        await api.updateRoutineSpecification(editingSpec.id, {
+        await updateSpecification(editingSpec.id, {
           name: payload.name,
           numberOfDives: payload.numberOfDives,
           numberOfGroups: payload.numberOfGroups,
@@ -187,11 +187,10 @@ export default function RoutineSpecificationsScreen() {
           beginner: payload.beginner,
         });
       } else {
-        await api.createRoutineSpecification(payload);
+        await createSpecification(payload);
       }
 
       setModalVisible(false);
-      await loadData();
     } catch (e: any) {
       Alert.alert(t('common.error', 'Fehler'), e?.message || t('routineSpecifications.saveFailed', 'Speichern fehlgeschlagen'));
     } finally {
@@ -208,9 +207,8 @@ export default function RoutineSpecificationsScreen() {
     if (!specToDelete) return;
     setIsDeletingSpec(true);
     try {
-      await api.deleteRoutineSpecification(specToDelete.id);
+      await deleteSpecification(specToDelete.id);
       setSpecToDelete(null);
-      await loadData();
     } catch (e: any) {
       Alert.alert(t('common.error', 'Fehler'), e?.message || t('routineSpecifications.deleteFailed', 'Löschen fehlgeschlagen'));
     } finally {

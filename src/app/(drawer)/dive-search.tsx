@@ -33,40 +33,26 @@ const POSITION_LABELS: Record<ExecutionPosition, { de: string; en: string }> = {
   D: { de: 'D – Frei', en: 'D – Free' },
 };
 
+import { useDiveCatalog } from '../../hooks/useDataStore';
+
 export default function DiveSearchScreen() {
   const { t, i18n } = useTranslation();
   const { user, isTrainerOrAdmin } = useAuth();
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [selectedDiveCode, setSelectedDiveCode] = useState<string | null>(null);
-  const [dives, setDives] = useState<DiveDefinition[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+
+  const { executions, isLoading } = useDiveCatalog();
+
+  const dives: DiveDefinition[] = useMemo(() => {
+    if (executions && executions.length > 0) {
+      return mapApiDivesToDefinitions(executions);
+    }
+    return [];
+  }, [executions]);
 
   const isDE = i18n.language === 'de';
   const isTrainer = isTrainerOrAdmin();
-
-  useEffect(() => {
-    let isMounted = true;
-    async function loadCatalogDives() {
-      setIsLoading(true);
-      try {
-        const apiExecutions: DiveExecutionResponse[] = await api.getAllDiveExecutions();
-        if (isMounted && apiExecutions && apiExecutions.length > 0) {
-          const merged = mapApiDivesToDefinitions(apiExecutions);
-          setDives(merged);
-        }
-      } catch (e) {
-        console.warn('Failed to load dives from API, using catalog definitions:', e);
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
-    }
-
-    loadCatalogDives();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
 
   const results = useMemo(() => searchDives(query, dives), [query, dives]);
 

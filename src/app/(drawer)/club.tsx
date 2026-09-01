@@ -27,13 +27,18 @@ const ROLE_COLORS: Record<ClubRole, string> = {
   MEMBER: Colors.textSecondary,
 };
 
+import { useClubMembers } from '../../hooks/useDataStore';
+
 export default function ClubScreen() {
   const { t } = useTranslation();
   const { user, activeClubId, activeClubMembership, switchClub, canManageInvites, isTrainerOrAdmin } = useAuth();
   const router = useRouter();
   const [inviteModalVisible, setInviteModalVisible] = useState(false);
   const [clubDetails, setClubDetails] = useState<ClubResponse | null>(null);
-  const [memberCount, setMemberCount] = useState<number | null>(null);
+
+  const clubIdNum = activeClubId ? Number(activeClubId) : 0;
+  const { members } = useClubMembers(clubIdNum);
+  const memberCount = members.length > 0 ? members.length : null;
 
   const canManageSpecs = isTrainerOrAdmin();
 
@@ -47,14 +52,6 @@ export default function ClubScreen() {
         if (isMounted) setClubDetails(club);
       } catch (e) {
         console.warn('Failed to load club details:', e);
-      }
-
-      try {
-        const members = await api.getClubMembers(activeClubId);
-        if (isMounted) setMemberCount(members.length);
-      } catch (e) {
-        // Permissions might restrict full member list for basic members
-        if (isMounted) setMemberCount(null);
       }
     }
 

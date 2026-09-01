@@ -8,6 +8,7 @@ import React, {
 
 import { AuthState, ClubMembership, ClubRole, LoginCredentials, RegisterWithInvitePayload, User, GlobalRole } from '../app/types/user';
 import { api, JWT_KEY, ACTIVE_CLUB_KEY, setAuthToken, storage, UserProfileResponse } from '../services/api';
+import { dataStore } from '../services/dataStore';
 
 // ────────────────────────────────────────────────────────────
 // CONTEXT-TYP
@@ -233,6 +234,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setAuthToken(null);
       await storage.deleteItem(JWT_KEY);
       await storage.deleteItem(ACTIVE_CLUB_KEY);
+      dataStore.clearAll();
     } catch (e) {
       console.warn('Logout storage error:', e);
     }

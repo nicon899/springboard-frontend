@@ -54,14 +54,21 @@ function catToForm(cat: AgeCategoryResponse): AgeCatForm {
 // Haupt-Screen
 // ────────────────────────────────────────────────────────────
 
+import { useClubAgeCategories } from '../../hooks/useDataStore';
+
 export default function AgeCategoriesScreen() {
-  const { activeClubId, activeClubMembership, isTrainerOrAdmin } = useAuth();
+  const { activeClubId, isTrainerOrAdmin } = useAuth();
 
   const canEdit = isTrainerOrAdmin();
-  const clubId = activeClubId;
+  const clubIdNum = activeClubId ? Number(activeClubId) : 0;
 
-  const [categories, setCategories] = useState<AgeCategoryResponse[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const {
+    categories,
+    isLoading,
+    createCategory,
+    updateCategory,
+    deleteCategory,
+  } = useClubAgeCategories(clubIdNum);
 
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -72,24 +79,6 @@ export default function AgeCategoriesScreen() {
   // Delete modal state
   const [catToDelete, setCatToDelete] = useState<AgeCategoryResponse | null>(null);
   const [isDeletingCat, setIsDeletingCat] = useState(false);
-
-  // ── Daten laden ──
-  const loadCategories = useCallback(async () => {
-    if (!clubId) return;
-    setIsLoading(true);
-    try {
-      const data = await api.getAgeCategoriesByClub(clubId);
-      setCategories(data);
-    } catch (e: any) {
-      console.warn('Failed to load age categories:', e);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [clubId]);
-
-  useEffect(() => {
-    loadCategories();
-  }, [loadCategories]);
 
   // ── Modal öffnen ──
   const openCreate = () => {
@@ -119,7 +108,7 @@ export default function AgeCategoriesScreen() {
   const handleSave = async () => {
     const error = validate();
     if (error) { Alert.alert('Ungültige Eingabe', error); return; }
-    if (!clubId) return;
+    if (!clubIdNum) return;
 
     setIsSaving(true);
     try {
@@ -137,17 +126,16 @@ export default function AgeCategoriesScreen() {
       };
 
       if (editingCat) {
-        await api.updateAgeCategory(editingCat.id, payload);
+        await updateCategory(editingCat.id, payload);
       } else {
         const createPayload: CreateAgeCategoryRequest = {
-          clubId: Number(clubId),
+          clubId: clubIdNum,
           ...payload,
         };
-        await api.createAgeCategory(createPayload);
+        await createCategory(createPayload);
       }
 
       setModalVisible(false);
-      await loadCategories();
     } catch (e: any) {
       Alert.alert('Fehler', e?.message || 'Speichern fehlgeschlagen');
     } finally {
@@ -164,9 +152,8 @@ export default function AgeCategoriesScreen() {
     if (!catToDelete) return;
     setIsDeletingCat(true);
     try {
-      await api.deleteAgeCategory(catToDelete.id);
+      await deleteCategory(catToDelete.id);
       setCatToDelete(null);
-      await loadCategories();
     } catch (e: any) {
       Alert.alert('Fehler', e?.message || 'Löschen fehlgeschlagen');
     } finally {

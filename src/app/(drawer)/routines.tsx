@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -31,6 +31,13 @@ import {
   RoutineResponse,
   RoutineSpecificationResponse,
 } from '../../services/api';
+import {
+  useUserRoutines,
+  useClubSpecifications,
+  useAthleteDives,
+  useDiveCatalog,
+  useClubMembers,
+} from '../../hooks/useDataStore';
 import { DIVE_GROUP_NAMES } from '../constants/diveData';
 import Toast, { ToastMessage, ToastType } from '../../components/ui/Toast';
 import ConfirmModal from '../../components/modals/ConfirmModal';
@@ -222,7 +229,7 @@ export default function RoutinesScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
   const isDE = i18n.language === 'de';
-  const { user, activeClubId, isTrainerOrAdmin } = useAuth();
+  const { user, activeClubId, activeClubMembership, isTrainerOrAdmin } = useAuth();
   const params = useLocalSearchParams<{ athleteId?: string; athleteName?: string }>();
 
   const canEdit = isTrainerOrAdmin();
@@ -275,10 +282,40 @@ export default function RoutinesScreen() {
     [t]
   );
 
-  const [routines, setRoutines] = useState<RoutineResponse[]>([]);
-  const [specs, setSpecs] = useState<RoutineSpecificationResponse[]>([]);
+  const targetUserIdNum = params.athleteId ? Number(params.athleteId) : (user?.id ? Number(user.id) : 0);
+  const activeClubIdNum = activeClubId ? Number(activeClubId) : (activeClubMembership?.clubId ? Number(activeClubMembership.clubId) : 0);
+
+  // Centralized Hooks
+  const {
+    routines,
+    isLoading: isRoutinesLoading,
+    refresh: refreshRoutines,
+    createRoutine: createRoutineInStore,
+    updateRoutine: updateRoutineInStore,
+    deleteRoutine: deleteRoutineInStore,
+    duplicateRoutine: duplicateRoutineInStore,
+    setRoutines,
+  } = useUserRoutines(targetUserIdNum);
+
+  const { specifications: specs, refresh: refreshSpecs } = useClubSpecifications(activeClubIdNum);
+  const { dives: athleteDivesData, refresh: refreshAthleteDives } = useAthleteDives(targetUserIdNum);
+  const { executions: catalogExecutions } = useDiveCatalog();
+  const { members: clubMembers } = useClubMembers(activeClubIdNum);
+
   const [athleteProfile, setAthleteProfile] = useState<UserProfileResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const isLoading = isRoutinesLoading && routines.length === 0;
+
+  const { athleteDivesMap, athleteDiveExecutionIds } = useMemo(() => {
+    const map = new Map<number, AthleteDiveStatusResponse>();
+    const set = new Set<number>();
+    athleteDivesData.forEach((d) => {
+      if (d.diveExecutionId) {
+        map.set(d.diveExecutionId, d);
+        set.add(d.diveExecutionId);
+      }
+    });
+    return { athleteDivesMap: map, athleteDiveExecutionIds: set };
+  }, [athleteDivesData]);
 
   // Toast feedback state
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -286,9 +323,7 @@ export default function RoutinesScreen() {
     setToast({ message, type });
   };
 
-  // Catalog executions for adding dives
-  const [catalogExecutions, setCatalogExecutions] = useState<DiveExecutionResponse[]>([]);
-  const [isCatalogLoading, setIsCatalogLoading] = useState(false);
+  const isCatalogLoading = false;
 
   // Create modal state
   const [createModalVisible, setCreateModalVisible] = useState(false);
@@ -317,8 +352,6 @@ export default function RoutinesScreen() {
   const [selectedGroupFilter, setSelectedGroupFilter] = useState<number | null>(null);
   const [onlyValidFilter, setOnlyValidFilter] = useState(false);
   const [onlyAthleteDivesFilter, setOnlyAthleteDivesFilter] = useState(false);
-  const [athleteDiveExecutionIds, setAthleteDiveExecutionIds] = useState<Set<number>>(new Set());
-  const [athleteDivesMap, setAthleteDivesMap] = useState<Map<number, AthleteDiveStatusResponse>>(new Map());
   const [isAddingDiveId, setIsAddingDiveId] = useState<number | null>(null);
 
   // Delete confirmation states
@@ -351,7 +384,6 @@ export default function RoutinesScreen() {
   const [duplicateDisplayName, setDuplicateDisplayName] = useState('');
   const [isDuplicating, setIsDuplicating] = useState(false);
   const [athletePickerOpen, setAthletePickerOpen] = useState(false);
-  const [clubMembers, setClubMembers] = useState<MembershipResponse[]>([]);
 
   // Expanded state per routine ID (default: false / collapsed)
   const [expandedRoutines, setExpandedRoutines] = useState<Record<number, boolean>>({});
@@ -363,79 +395,48 @@ export default function RoutinesScreen() {
     }));
   };
 
-  // ── Daten laden ──
-  const loadData = useCallback(async () => {
-    if (!targetUserId || !activeClubId) return;
-    setIsLoading(true);
-    try {
-      const [routineData, specData, athleteDivesData, userProfileData, membersData] = await Promise.all([
-        api.getRoutinesByUser(targetUserId).catch(() => [] as RoutineResponse[]),
-        api.getSpecificationsByClub(activeClubId).catch(() => [] as RoutineSpecificationResponse[]),
-        api.getAthleteDives(targetUserId).catch(() => [] as AthleteDiveStatusResponse[]),
-        targetUserId === user?.id ? Promise.resolve(user) : api.getUserById(targetUserId).catch(() => null),
-        api.getClubMembers(activeClubId).catch(() => [] as MembershipResponse[]),
-      ]);
-      setRoutines(routineData);
-      setSpecs(specData);
-      const map = new Map<number, AthleteDiveStatusResponse>();
-      athleteDivesData.forEach((d) => {
-        if (d.diveExecutionId) {
-          map.set(d.diveExecutionId, d);
-        }
-      });
-      setAthleteDivesMap(map);
-      setAthleteDiveExecutionIds(new Set(athleteDivesData.map((d) => d.diveExecutionId)));
-      setAthleteProfile(userProfileData);
-      setClubMembers(membersData);
-    } catch (e) {
-      console.warn('Failed to load routines:', e);
-      showToast(getErrorMessage(e), 'error');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [targetUserId, activeClubId, user, getErrorMessage]);
-
+  // Load user profile if needed
   useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  // Load catalog dives executions
-  const loadCatalog = useCallback(async () => {
-    if (catalogExecutions.length > 0 && athleteDiveExecutionIds.size > 0) return;
-    setIsCatalogLoading(true);
-    try {
-      const [execs, athleteDives] = await Promise.all([
-        catalogExecutions.length > 0 ? Promise.resolve(catalogExecutions) : api.getAllDiveExecutions(),
-        athleteDiveExecutionIds.size > 0
-          ? Promise.resolve([] as AthleteDiveStatusResponse[])
-          : api.getAthleteDives(targetUserId).catch(() => [] as AthleteDiveStatusResponse[]),
-      ]);
-      if (catalogExecutions.length === 0) setCatalogExecutions(execs || []);
-      if (athleteDiveExecutionIds.size === 0 && athleteDives.length > 0) {
-        const map = new Map<number, AthleteDiveStatusResponse>();
-        athleteDives.forEach((d) => {
-          if (d.diveExecutionId) {
-            map.set(d.diveExecutionId, d);
-          }
-        });
-        setAthleteDivesMap(map);
-        setAthleteDiveExecutionIds(new Set(athleteDives.map((d) => d.diveExecutionId)));
-      }
-    } catch (e) {
-      console.warn('Failed to load dive catalog:', e);
-      showToast(getErrorMessage(e), 'error');
-    } finally {
-      setIsCatalogLoading(false);
+    if (!targetUserIdNum) return;
+    if (targetUserIdNum === user?.id) {
+      setAthleteProfile(user as any);
+    } else {
+      api.getUserById(targetUserIdNum).then(setAthleteProfile).catch(() => null);
     }
-  }, [catalogExecutions.length, athleteDiveExecutionIds.size, targetUserId, getErrorMessage]);
+  }, [targetUserIdNum, user]);
+
+  const loadData = useCallback(async () => {
+    if (!targetUserIdNum) return;
+    await Promise.all([
+      refreshRoutines(),
+      refreshSpecs(),
+      refreshAthleteDives(),
+    ]);
+  }, [targetUserIdNum, refreshRoutines, refreshSpecs, refreshAthleteDives]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (targetUserIdNum) {
+        refreshRoutines();
+        refreshAthleteDives();
+      }
+      if (activeClubIdNum) {
+        refreshSpecs();
+      }
+    }, [targetUserIdNum, activeClubIdNum, refreshRoutines, refreshAthleteDives, refreshSpecs])
+  );
+
+  const loadCatalog = useCallback(async () => {
+    // No-op: dive executions are automatically loaded and cached by useDiveCatalog
+  }, []);
 
   // ── Routine anlegen ──
   const handleCreate = async () => {
-    if (!targetUserId) return;
+    if (!targetUserIdNum) return;
     setIsSaving(true);
     try {
-      await api.createRoutine({
-        userId: Number(targetUserId),
+      await createRoutineInStore({
+        userId: targetUserIdNum,
         specificationId: selectedSpecId ?? undefined,
         displayName: createDisplayName.trim() || undefined,
       });
@@ -443,7 +444,6 @@ export default function RoutinesScreen() {
       setSelectedSpecId(null);
       setCreateDisplayName('');
       showToast(t('routines.toasts.createSuccess', 'Routine erfolgreich angelegt'), 'success');
-      await loadData();
     } catch (e: any) {
       showToast(getErrorMessage(e), 'error');
     } finally {
@@ -463,13 +463,12 @@ export default function RoutinesScreen() {
     if (!editingRoutine) return;
     setIsSaving(true);
     try {
-      await api.updateRoutine(editingRoutine.id, {
+      await updateRoutineInStore(editingRoutine.id, {
         specificationId: editSpecId ?? undefined,
         displayName: editDisplayName.trim() || undefined,
       });
       setEditModalVisible(false);
       showToast(t('routines.toasts.updateSuccess', 'Routine aktualisiert'), 'success');
-      await loadData();
     } catch (e: any) {
       showToast(getErrorMessage(e), 'error');
     } finally {
@@ -489,20 +488,21 @@ export default function RoutinesScreen() {
   };
 
   const handleDuplicate = async () => {
-    if (!duplicateRoutineTarget || !targetUserId) return;
-    const resolvedTargetUserId = duplicateTargetMode === 'SAME' ? targetUserId : selectedTargetUserId;
+    if (!duplicateRoutineTarget || !targetUserIdNum) return;
+    const resolvedTargetUserId = duplicateTargetMode === 'SAME' ? targetUserIdNum : selectedTargetUserId;
     if (!resolvedTargetUserId) return;
 
     setIsDuplicating(true);
     try {
-      const res = await api.duplicateRoutine(duplicateRoutineTarget.id, {
-        targetUserId: Number(resolvedTargetUserId),
-        displayName: duplicateDisplayName.trim() || undefined,
-      });
+      const res = await duplicateRoutineInStore(
+        duplicateRoutineTarget.id,
+        Number(resolvedTargetUserId),
+        duplicateDisplayName.trim() || undefined
+      );
 
       setDuplicateModalVisible(false);
 
-      if (Number(resolvedTargetUserId) === Number(targetUserId)) {
+      if (Number(resolvedTargetUserId) === targetUserIdNum) {
         showToast(
           t('routines.toasts.duplicateSuccess', {
             name: res.displayName || getRoutineTitle(res),
@@ -510,7 +510,6 @@ export default function RoutinesScreen() {
           }),
           'success'
         );
-        await loadData();
       } else {
         const targetMember = clubMembers.find((m) => m.userId === Number(resolvedTargetUserId));
         const targetName = targetMember?.userFullName || `#${resolvedTargetUserId}`;
@@ -536,11 +535,11 @@ export default function RoutinesScreen() {
   };
 
   const confirmDeleteRoutine = async () => {
-    if (!routineToDelete) return;
+    if (!routineToDelete || !targetUserIdNum) return;
     const routineTitle = getRoutineTitle(routineToDelete);
     setIsDeletingRoutine(true);
     try {
-      await api.deleteRoutine(routineToDelete.id);
+      await deleteRoutineInStore(routineToDelete.id);
       showToast(
         t('routines.toasts.deleteSuccess', {
           name: routineTitle,
