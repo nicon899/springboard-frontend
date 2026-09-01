@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { AthleteTrainingEntry, DiveHeight } from '../../app/types/dive';
+import { AthleteTrainingEntry, DiveHeight, DiveStatus } from '../../app/types/dive';
 import { DIVE_GROUP_NAMES } from '../../app/constants/diveData';
 import {
   api,
@@ -211,7 +211,7 @@ export default function AddCommentModal({
           height: entry.height,
           name: `${posName} · ${entry.height}`,
           dd: entry.degreeOfDifficulty ? `DD ${entry.degreeOfDifficulty.toFixed(1)}` : '',
-          isAthleteDive: true,
+          status: entry.status,
         };
       }
     }
@@ -219,12 +219,13 @@ export default function AddCommentModal({
       const uiHeight = BACKEND_TO_HEIGHT[selectedCatalogExecution.height] ?? selectedCatalogExecution.height;
       const posName = getPositionName(selectedCatalogExecution.execution);
       const title = (isDE ? selectedCatalogExecution.nameDe : selectedCatalogExecution.nameEn) || selectedCatalogExecution.diveCode;
+      const existingEntry = athleteExecutionMap.get(selectedCatalogExecution.id);
       return {
         code: `${selectedCatalogExecution.diveCode}${selectedCatalogExecution.execution}`,
         height: uiHeight,
         name: title,
         dd: selectedCatalogExecution.degreeOfDifficulty ? `DD ${selectedCatalogExecution.degreeOfDifficulty.toFixed(1)}` : '',
-        isAthleteDive: athleteDiveExecutionIds.has(selectedCatalogExecution.id),
+        status: existingEntry?.status,
       };
     }
     return null;
@@ -232,9 +233,9 @@ export default function AddCommentModal({
     selectedDiveStatusId,
     selectedCatalogExecution,
     athleteDives,
+    athleteExecutionMap,
     isDE,
     getPositionName,
-    athleteDiveExecutionIds,
   ]);
 
   const handleSelectExecution = (item: DiveExecutionResponse) => {
@@ -541,11 +542,11 @@ export default function AddCommentModal({
                     const posName = getPositionName(item.execution);
                     const diveTitle =
                       (isDE ? item.nameDe : item.nameEn) || item.diveCode;
-                    const isAthleteDive = athleteDiveExecutionIds.has(item.id);
+                    const athleteDive = athleteExecutionMap.get(item.id);
 
                     const isSelected =
                       (selectedCatalogExecution && selectedCatalogExecution.id === item.id) ||
-                      (selectedDiveStatusId && athleteExecutionMap.get(item.id)?.id === selectedDiveStatusId);
+                      (selectedDiveStatusId && athleteDive?.id === selectedDiveStatusId);
 
                     return (
                       <TouchableOpacity
@@ -587,10 +588,29 @@ export default function AddCommentModal({
                             <Text style={styles.catalogMetaGroup}>
                               {getGroupName(item.groupNumber)}
                             </Text>
-                            {isAthleteDive && (
-                              <View style={styles.athleteDiveBadge}>
-                                <Text style={styles.athleteDiveBadgeText}>
-                                  👤 Sportler
+                            {/* Status-Badge statt "Sportler"-Badge */}
+                            {athleteDive && (
+                              <View
+                                style={[
+                                  styles.diveStatusPill,
+                                  athleteDive.status === 'MASTERED' && styles.diveStatusPillMastered,
+                                  athleteDive.status === 'LEARNING' && styles.diveStatusPillLearning,
+                                  athleteDive.status === 'PLANNED' && styles.diveStatusPillPlanned,
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.diveStatusPillText,
+                                    athleteDive.status === 'MASTERED' && styles.diveStatusPillTextMastered,
+                                    athleteDive.status === 'LEARNING' && styles.diveStatusPillTextLearning,
+                                    athleteDive.status === 'PLANNED' && styles.diveStatusPillTextPlanned,
+                                  ]}
+                                >
+                                  {athleteDive.status === 'MASTERED'
+                                    ? `🟢 ${t('trainingStatus.statusMastered', 'Sicher')}`
+                                    : athleteDive.status === 'LEARNING'
+                                    ? `🟡 ${t('trainingStatus.statusLearning', 'Im Aufbau')}`
+                                    : `⚪ ${t('trainingStatus.statusPlanned', 'Geplant')}`}
                                 </Text>
                               </View>
                             )}
@@ -646,9 +666,30 @@ export default function AddCommentModal({
                           {!!currentSelectedDiveInfo.dd && (
                             <Text style={styles.catalogMetaBadge}>{currentSelectedDiveInfo.dd}</Text>
                           )}
-                          {currentSelectedDiveInfo.isAthleteDive && (
-                            <View style={styles.athleteDiveBadge}>
-                              <Text style={styles.athleteDiveBadgeText}>👤 Sportler</Text>
+                          {/* Status Badge */}
+                          {currentSelectedDiveInfo.status && (
+                            <View
+                              style={[
+                                styles.diveStatusPill,
+                                currentSelectedDiveInfo.status === 'MASTERED' && styles.diveStatusPillMastered,
+                                currentSelectedDiveInfo.status === 'LEARNING' && styles.diveStatusPillLearning,
+                                currentSelectedDiveInfo.status === 'PLANNED' && styles.diveStatusPillPlanned,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.diveStatusPillText,
+                                  currentSelectedDiveInfo.status === 'MASTERED' && styles.diveStatusPillTextMastered,
+                                  currentSelectedDiveInfo.status === 'LEARNING' && styles.diveStatusPillTextLearning,
+                                  currentSelectedDiveInfo.status === 'PLANNED' && styles.diveStatusPillTextPlanned,
+                                ]}
+                              >
+                                {currentSelectedDiveInfo.status === 'MASTERED'
+                                  ? `🟢 ${t('trainingStatus.statusMastered', 'Sicher')}`
+                                  : currentSelectedDiveInfo.status === 'LEARNING'
+                                  ? `🟡 ${t('trainingStatus.statusLearning', 'Im Aufbau')}`
+                                  : `⚪ ${t('trainingStatus.statusPlanned', 'Geplant')}`}
+                              </Text>
                             </View>
                           )}
                         </View>
@@ -1308,17 +1349,42 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: Colors.textTertiary,
   },
-  athleteDiveBadge: {
-    backgroundColor: Colors.secondaryLight,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 2,
+
+  /* ── Dive Status Pill (Matching training status styles) ── */
+  diveStatusPill: {
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
+    borderRadius: BorderRadius.xs,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  athleteDiveBadgeText: {
+  diveStatusPillMastered: {
+    backgroundColor: Colors.statusMasteredBg,
+    borderColor: Colors.statusMastered + '40',
+  },
+  diveStatusPillLearning: {
+    backgroundColor: Colors.statusLearningBg,
+    borderColor: Colors.statusLearning + '40',
+  },
+  diveStatusPillPlanned: {
+    backgroundColor: Colors.statusPlannedBg,
+    borderColor: Colors.statusPlanned + '40',
+  },
+  diveStatusPillText: {
     fontSize: 10,
-    color: Colors.secondaryDark,
-    fontWeight: FontWeight.medium,
+    fontWeight: FontWeight.bold,
   },
+  diveStatusPillTextMastered: {
+    color: Colors.statusMastered,
+  },
+  diveStatusPillTextLearning: {
+    color: Colors.statusLearning,
+  },
+  diveStatusPillTextPlanned: {
+    color: Colors.statusPlanned,
+  },
+
   selectActionBox: {
     paddingLeft: Spacing.xs,
   },

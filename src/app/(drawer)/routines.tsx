@@ -318,6 +318,7 @@ export default function RoutinesScreen() {
   const [onlyValidFilter, setOnlyValidFilter] = useState(false);
   const [onlyAthleteDivesFilter, setOnlyAthleteDivesFilter] = useState(false);
   const [athleteDiveExecutionIds, setAthleteDiveExecutionIds] = useState<Set<number>>(new Set());
+  const [athleteDivesMap, setAthleteDivesMap] = useState<Map<number, AthleteDiveStatusResponse>>(new Map());
   const [isAddingDiveId, setIsAddingDiveId] = useState<number | null>(null);
 
   // Delete confirmation states
@@ -376,6 +377,13 @@ export default function RoutinesScreen() {
       ]);
       setRoutines(routineData);
       setSpecs(specData);
+      const map = new Map<number, AthleteDiveStatusResponse>();
+      athleteDivesData.forEach((d) => {
+        if (d.diveExecutionId) {
+          map.set(d.diveExecutionId, d);
+        }
+      });
+      setAthleteDivesMap(map);
       setAthleteDiveExecutionIds(new Set(athleteDivesData.map((d) => d.diveExecutionId)));
       setAthleteProfile(userProfileData);
       setClubMembers(membersData);
@@ -404,6 +412,13 @@ export default function RoutinesScreen() {
       ]);
       if (catalogExecutions.length === 0) setCatalogExecutions(execs || []);
       if (athleteDiveExecutionIds.size === 0 && athleteDives.length > 0) {
+        const map = new Map<number, AthleteDiveStatusResponse>();
+        athleteDives.forEach((d) => {
+          if (d.diveExecutionId) {
+            map.set(d.diveExecutionId, d);
+          }
+        });
+        setAthleteDivesMap(map);
         setAthleteDiveExecutionIds(new Set(athleteDives.map((d) => d.diveExecutionId)));
       }
     } catch (e) {
@@ -2029,7 +2044,7 @@ export default function RoutinesScreen() {
                   const posName = getPositionName(item.execution);
                   const isBeingAdded = isAddingDiveId === item.id;
                   const diveTitle = (i18n.language === 'en' ? (item.nameEn || item.nameDe) : (item.nameDe || item.nameEn)) || item.diveCode;
-                  const isAthleteDive = athleteDiveExecutionIds.has(item.id);
+                  const athleteDive = athleteDivesMap.get(item.id);
 
                   const validation = validateDiveForRoutine(
                     targetRoutineForAdd,
@@ -2087,10 +2102,29 @@ export default function RoutinesScreen() {
                           <Text style={styles.catalogMetaGroup}>
                             {getGroupName(item.groupNumber)}
                           </Text>
-                          {isAthleteDive && (
-                            <View style={styles.athleteDiveBadge}>
-                              <Text style={styles.athleteDiveBadgeText}>
-                                👤 {t('routines.addDiveModal.athleteDiveBadge', 'Sportler')}
+                          {/* Status-Badge statt "Sportler"-Badge */}
+                          {athleteDive && (
+                            <View
+                              style={[
+                                styles.diveStatusPill,
+                                athleteDive.status === 'MASTERED' && styles.diveStatusPillMastered,
+                                athleteDive.status === 'LEARNING' && styles.diveStatusPillLearning,
+                                athleteDive.status === 'PLANNED' && styles.diveStatusPillPlanned,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.diveStatusPillText,
+                                  athleteDive.status === 'MASTERED' && styles.diveStatusPillTextMastered,
+                                  athleteDive.status === 'LEARNING' && styles.diveStatusPillTextLearning,
+                                  athleteDive.status === 'PLANNED' && styles.diveStatusPillTextPlanned,
+                                ]}
+                              >
+                                {athleteDive.status === 'MASTERED'
+                                  ? `🟢 ${t('trainingStatus.statusMastered', 'Sicher')}`
+                                  : athleteDive.status === 'LEARNING'
+                                  ? `🟡 ${t('trainingStatus.statusLearning', 'Im Aufbau')}`
+                                  : `⚪ ${t('trainingStatus.statusPlanned', 'Geplant')}`}
                               </Text>
                             </View>
                           )}
@@ -3316,16 +3350,38 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     fontWeight: FontWeight.bold,
   },
-  athleteDiveBadge: {
-    backgroundColor: Colors.primarySurface,
+  diveStatusPill: {
     paddingHorizontal: 5,
-    paddingVertical: 1,
+    paddingVertical: 1.5,
     borderRadius: BorderRadius.xs,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  athleteDiveBadgeText: {
+  diveStatusPillMastered: {
+    backgroundColor: Colors.statusMasteredBg,
+    borderColor: Colors.statusMastered + '40',
+  },
+  diveStatusPillLearning: {
+    backgroundColor: Colors.statusLearningBg,
+    borderColor: Colors.statusLearning + '40',
+  },
+  diveStatusPillPlanned: {
+    backgroundColor: Colors.statusPlannedBg,
+    borderColor: Colors.statusPlanned + '40',
+  },
+  diveStatusPillText: {
     fontSize: 10,
-    color: Colors.primary,
-    fontWeight: FontWeight.semiBold,
+    fontWeight: FontWeight.bold,
+  },
+  diveStatusPillTextMastered: {
+    color: Colors.statusMastered,
+  },
+  diveStatusPillTextLearning: {
+    color: Colors.statusLearning,
+  },
+  diveStatusPillTextPlanned: {
+    color: Colors.statusPlanned,
   },
 
   // Reason Badges on Catalog Items
