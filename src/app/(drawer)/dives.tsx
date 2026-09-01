@@ -34,6 +34,7 @@ import {
   CommentResponse,
   DiveExecutionResponse,
 } from '../../services/api';
+import { isSystemComment } from '../../services/commentUtils';
 
 const HEIGHTS: DiveHeight[] = ['1m', '3m', '5m', '7.5m', '10m'];
 const STATUSES: DiveStatus[] = ['PLANNED', 'LEARNING', 'MASTERED'];
@@ -144,11 +145,16 @@ export default function AthleteDivesScreen() {
   const entries: AthleteTrainingEntry[] = useMemo(() => {
     return rawAthleteDives.map((d) => {
       const diveNotes: TrainerNote[] = rawComments
-        .filter((c) => c.athleteDiveStatusId != null && Number(c.athleteDiveStatusId) === Number(d.id))
+        .filter(
+          (c) =>
+            !isSystemComment(c) &&
+            c.athleteDiveStatusId != null &&
+            Number(c.athleteDiveStatusId) === Number(d.id)
+        )
         .map((c) => ({
           id: String(c.id),
           text: c.content,
-          authorId: String(c.authorId),
+          authorId: String(c.authorId ?? ''),
           authorName: c.authorName || 'Trainer',
           createdAt: c.createdAt,
           sharedWithAthlete: c.sharedWithAthlete,

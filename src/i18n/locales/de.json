@@ -458,5 +458,14 @@
       "ROUTINE_MIN_GROUPS_NOT_REACHABLE": "Mit diesem Sprung kann die Mindestanzahl von {{numberOfGroups}} verschiedenen Gruppen nicht mehr erreicht werden (noch {{missingGroups}} fehlende Gruppe(n), aber nur {{slotsRemaining}} Slot(s) übrig).",
       "unknown": "Ein unbekannter Fehler ist aufgetreten."
     }
+  },
+  "systemComments": {
+    "diveStatusMastered": "🎯 {{dive}} erfolgreich gemeistert! (von {{trainer}}) 👏",
+    "diveStatusMasteredNoTrainer": "🎯 {{dive}} erfolgreich gemeistert! 👏",
+    "diveStatusLearning": "💪 Training für {{dive}} gestartet. Weiter so! (von {{trainer}}) 🚀",
+    "diveStatusLearningNoTrainer": "💪 Training für {{dive}} gestartet. Weiter so! 🚀",
+    "diveStatusPlanned": "📋 {{dive}} als neues Ziel aufgenommen (von {{trainer}}) 🎯",
+    "diveStatusPlannedNoTrainer": "📋 {{dive}} als neues Ziel aufgenommen 🎯",
+    "systemAuthor": "System"
   }
 }

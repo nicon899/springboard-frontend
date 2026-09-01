@@ -1,5 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
+import i18n from '../i18n';
 
 export const JWT_KEY = 'springboard_jwt';
 export const ACTIVE_CLUB_KEY = 'springboard_active_club';
@@ -173,8 +174,9 @@ export interface CommentResponse {
   id: number;
   content: string;
   sharedWithAthlete: boolean;
-  authorId: number;
+  authorId?: number | null;
   authorName: string;
+  isSystem?: boolean;
   athleteId: number;
   athleteDiveStatusId?: number;
   createdAt: string;
@@ -410,6 +412,7 @@ export interface RequestOptions extends RequestInit {
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'Accept-Language': i18n?.language || 'de',
     ...(options.headers as Record<string, string>),
   };
 

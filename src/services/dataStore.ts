@@ -583,6 +583,10 @@ class CentralDataStore {
     }
 
     this.notify();
+
+    // Refresh comments in background to pick up any automatically generated system note
+    this.loadComments(numId, true).catch(() => {});
+
     return updated;
   };
 

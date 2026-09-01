@@ -27,6 +27,7 @@ import {
   BACKEND_TO_HEIGHT,
   CommentResponse,
 } from '../../services/api';
+import { isSystemComment, formatCommentContent } from '../../services/commentUtils';
 import {
   useAthleteDives,
   useAthleteComments,
@@ -477,14 +478,15 @@ export default function TrainingStatusScreen() {
             ) : (
               <View style={styles.commentsList}>
                 {visibleComments.map((comment) => {
+                  const isSystem = isSystemComment(comment);
                   const diveInfo = comment.athleteDiveStatusId
                     ? athleteDiveStatusMap.get(comment.athleteDiveStatusId)
                     : undefined;
                   const isPrivate = !comment.sharedWithAthlete;
-                  const isAuthor = String(comment.authorId) === String(user?.id);
+                  const isAuthor = !isSystem && comment.authorId != null && String(comment.authorId) === String(user?.id);
                   const isUnread = !isAuthor && comment.isRead === false;
                   const isGlobalAdmin = user?.globalRole === 'ROLE_ADMIN';
-                  const canEdit = isAuthor || isGlobalAdmin;
+                  const canEdit = !isSystem && (isAuthor || isGlobalAdmin);
                   const canDelete = isAuthor || isTrainer || isGlobalAdmin;
 
                   const dateFormatted = new Date(comment.createdAt).toLocaleDateString(
@@ -511,7 +513,9 @@ export default function TrainingStatusScreen() {
                       <View style={styles.commentCardHeader}>
                         <View style={styles.commentAuthorCol}>
                           <Text style={styles.commentAuthor}>
-                            👤 {comment.authorName || 'Trainer'}
+                            {isSystem
+                              ? `🤖 ${t('systemComments.systemAuthor', 'System')}`
+                              : `👤 ${comment.authorName || 'Trainer'}`}
                           </Text>
                           <Text style={styles.commentDate}>{dateFormatted}</Text>
                         </View>
@@ -594,7 +598,7 @@ export default function TrainingStatusScreen() {
 
                       {/* Kommentar Inhalt */}
                       <Text style={[styles.commentContent, isPrivate && styles.commentContentPrivate]}>
-                        {comment.content}
+                        {formatCommentContent(comment.content, t)}
                       </Text>
                     </View>
                   );

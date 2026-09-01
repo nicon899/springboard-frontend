@@ -453,5 +453,14 @@
       "ROUTINE_MIN_GROUPS_NOT_REACHABLE": "With this dive, the minimum number of {{numberOfGroups}} different groups can no longer be reached ({{missingGroups}} missing group(s), but only {{slotsRemaining}} slot(s) remaining).",
       "unknown": "An unknown error occurred."
     }
+  },
+  "systemComments": {
+    "diveStatusMastered": "🎯 {{dive}} successfully mastered! (by {{trainer}}) 👏",
+    "diveStatusMasteredNoTrainer": "🎯 {{dive}} successfully mastered! 👏",
+    "diveStatusLearning": "💪 Started training {{dive}}. Keep it up! (by {{trainer}}) 🚀",
+    "diveStatusLearningNoTrainer": "💪 Started training {{dive}}. Keep it up! 🚀",
+    "diveStatusPlanned": "📋 {{dive}} added as planned dive (by {{trainer}}) 🎯",
+    "diveStatusPlannedNoTrainer": "📋 {{dive}} added as planned dive 🎯",
+    "systemAuthor": "System"
   }
 }
