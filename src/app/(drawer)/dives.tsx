@@ -50,7 +50,7 @@ interface GroupedStatusDive {
 export default function AthleteDivesScreen() {
   const { t, i18n } = useTranslation();
   const { user, isTrainerOrAdmin } = useAuth();
-  const params = useLocalSearchParams<{ athleteId?: string; athleteName?: string }>();
+  const params = useLocalSearchParams<{ athleteId?: string; athleteName?: string; height?: string }>();
   const navigation = useNavigation();
   const router = useRouter();
 
@@ -59,7 +59,9 @@ export default function AthleteDivesScreen() {
   const viewingAthlete = params.athleteId && params.athleteId !== user?.id;
   const athleteLabel = params.athleteName ?? t('trainingStatus.myTraining');
 
-  const [selectedHeight, setSelectedHeight] = useState<DiveHeight>('1m');
+  const [selectedHeight, setSelectedHeight] = useState<DiveHeight>((params.height as DiveHeight) || '1m');
+  const [selectedGroup, setSelectedGroup] = useState<number | null>(null);
+  const [heightDropdownOpen, setHeightDropdownOpen] = useState(false);
   const [entries, setEntries] = useState<AthleteTrainingEntry[]>([]);
   const [catalogExecutions, setCatalogExecutions] = useState<DiveExecutionResponse[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -121,7 +123,7 @@ export default function AthleteDivesScreen() {
 
       const mappedEntries: AthleteTrainingEntry[] = divesRes.map((d) => {
         const diveNotes: TrainerNote[] = commentsRes
-          .filter((c) => c.athleteDiveStatusId === d.id || (!c.athleteDiveStatusId && String(c.athleteId) === String(targetAthleteId)))
+          .filter((c) => c.athleteDiveStatusId === d.id)
           .map((c) => ({
             id: String(c.id),
             text: c.content,
@@ -164,10 +166,6 @@ export default function AthleteDivesScreen() {
     });
   }, [navigation, viewingAthlete, athleteLabel, t]);
 
-  const currentEntries = useMemo(() => {
-    return entries.filter((e) => e.height === selectedHeight);
-  }, [entries, selectedHeight]);
-
   const getPositionName = useCallback((pos?: string) => {
     if (!pos) return '';
     switch (pos) {
@@ -189,6 +187,18 @@ export default function AthleteDivesScreen() {
       groupNumber: exec.groupNumber,
     };
   }, [catalogExecutions]);
+
+  const currentEntries = useMemo(() => {
+    return entries.filter((e) => {
+      if (e.height !== selectedHeight) return false;
+      if (selectedGroup !== null) {
+        const diveDef = getDiveDefinition(e.diveCode);
+        const groupNum = diveDef?.groupNumber || (parseInt(e.diveCode?.charAt(0), 10) || 1);
+        if (groupNum !== selectedGroup) return false;
+      }
+      return true;
+    });
+  }, [entries, selectedHeight, selectedGroup, getDiveDefinition]);
 
   const groupedByStatus = useMemo(() => {
     const result: Record<DiveStatus, GroupedStatusDive[]> = {
@@ -511,39 +521,105 @@ export default function AthleteDivesScreen() {
         </View>
       )}
 
-      {/* Höhen-Auswahl & Notizen-Sichtbarkeit */}
-      <View style={styles.heightFilterContainer}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.heightRow}
-          style={styles.heightScrollView}
-        >
-          {HEIGHTS.map((h) => (
+      {/* Höhen-Auswahl (Dropdown) & Notizen-Sichtbarkeit */}
+      <View style={styles.filterSection}>
+        <View style={styles.filterTopRow}>
+          <View style={styles.dropdownContainer}>
             <TouchableOpacity
-              key={h}
-              style={[styles.heightChip, selectedHeight === h && styles.heightChipActive]}
-              onPress={() => setSelectedHeight(h)}
+              style={[styles.dropdownBtn, heightDropdownOpen && styles.dropdownBtnOpen]}
+              onPress={() => setHeightDropdownOpen((prev) => !prev)}
+              activeOpacity={0.7}
             >
-              <Text style={[styles.heightChipLabel, selectedHeight === h && styles.heightChipLabelActive]}>
-                {h}
+              <View style={styles.dropdownBtnContent}>
+                <Text style={styles.dropdownLabel}>{t('trainingStatus.heightLabel', 'Höhe')}:</Text>
+                <View style={styles.selectedHeightBadge}>
+                  <Text style={styles.selectedHeightText}>{selectedHeight}</Text>
+                </View>
+              </View>
+              <Text style={styles.dropdownChevron}>{heightDropdownOpen ? '▲' : '▼'}</Text>
+            </TouchableOpacity>
+
+            {heightDropdownOpen && (
+              <View style={styles.dropdownList}>
+                {HEIGHTS.map((h) => {
+                  const isSelected = selectedHeight === h;
+                  const countAtHeight = entries.filter((e) => e.height === h).length;
+                  return (
+                    <TouchableOpacity
+                      key={h}
+                      style={[styles.dropdownItem, isSelected && styles.dropdownItemActive]}
+                      onPress={() => {
+                        setSelectedHeight(h);
+                        setHeightDropdownOpen(false);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.dropdownItemLeft}>
+                        <View style={[styles.dropdownItemBadge, isSelected && styles.dropdownItemBadgeActive]}>
+                          <Text style={[styles.dropdownItemBadgeText, isSelected && styles.dropdownItemBadgeTextActive]}>
+                            {h}
+                          </Text>
+                        </View>
+                        <Text style={[styles.dropdownItemCount, isSelected && styles.dropdownItemCountActive]}>
+                          {t('routines.diveCount', { count: countAtHeight })}
+                        </Text>
+                      </View>
+                      {isSelected && <Text style={styles.dropdownCheckmark}>✓</Text>}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+
+          <TouchableOpacity
+            style={[styles.notesVisibilityBtn, hideNotes && styles.notesVisibilityBtnActive]}
+            onPress={() => setHideNotes((v) => !v)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.notesVisibilityIcon}>{hideNotes ? '🙈' : '📝'}</Text>
+            <Text style={[styles.notesVisibilityText, hideNotes && styles.notesVisibilityTextActive]}>
+              {hideNotes
+                ? t('trainingStatus.notesHidden', 'Notizen ausgeblendet')
+                : t('trainingStatus.hideNotes', 'Notizen ausblenden')}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Gruppen-Filter Chips */}
+        <View style={styles.groupFilterContainer}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.groupFilterRow}
+          >
+            <TouchableOpacity
+              style={[styles.filterChip, selectedGroup === null && styles.filterChipActive]}
+              onPress={() => setSelectedGroup(null)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.filterChipText, selectedGroup === null && styles.filterChipTextActive]}>
+                {t('routines.addDiveModal.allGroups', 'Alle Gruppen')}
               </Text>
             </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        <TouchableOpacity
-          style={[styles.notesVisibilityBtn, hideNotes && styles.notesVisibilityBtnActive]}
-          onPress={() => setHideNotes((v) => !v)}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.notesVisibilityIcon}>{hideNotes ? '🙈' : '📝'}</Text>
-          <Text style={[styles.notesVisibilityText, hideNotes && styles.notesVisibilityTextActive]}>
-            {hideNotes
-              ? t('trainingStatus.notesHidden', 'Notizen ausgeblendet')
-              : t('trainingStatus.hideNotes', 'Notizen ausblenden')}
-          </Text>
-        </TouchableOpacity>
+            {[1, 2, 3, 4, 5, 6].map((grp) => {
+              const isActive = selectedGroup === grp;
+              const grpName = DIVE_GROUP_NAMES[grp]?.[isDE ? 'de' : 'en'] || '';
+              return (
+                <TouchableOpacity
+                  key={grp}
+                  style={[styles.filterChip, isActive && styles.filterChipActive]}
+                  onPress={() => setSelectedGroup(grp)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
+                    {grp}. {grpName}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
       </View>
 
       {/* Sprung-Listen (nach Status gruppiert) */}
@@ -562,7 +638,11 @@ export default function AthleteDivesScreen() {
 
         {currentEntries.length === 0 && (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>{t('trainingStatus.noDivesForHeight')}</Text>
+            <Text style={styles.emptyText}>
+              {selectedGroup !== null
+                ? t('trainingStatus.noDivesForGroup', 'Keine Sprünge für diese Gruppe vorhanden.')
+                : t('trainingStatus.noDivesForHeight')}
+            </Text>
           </View>
         )}
 
@@ -671,52 +751,128 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.medium,
     color: Colors.primaryDark,
   },
-  heightFilterContainer: {
+  filterSection: {
     backgroundColor: Colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
+    paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.sm,
-    flexDirection: 'column',
-    gap: Spacing.xs,
   },
-  heightScrollView: {
-    flexGrow: 0,
+  filterTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: Spacing.md,
   },
-  heightRow: {
-    paddingHorizontal: Spacing.lg,
-    gap: Spacing.sm,
+  dropdownContainer: {
+    flex: 1,
   },
-  heightChip: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.xs,
-    borderRadius: BorderRadius.full,
-    backgroundColor: Colors.surfaceSecondary,
-    borderWidth: 1,
+  dropdownBtn: {
+    height: 40,
+    borderWidth: 1.5,
     borderColor: Colors.border,
-  },
-  heightChipActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  heightChipLabel: {
-    fontSize: FontSize.sm,
-    fontWeight: FontWeight.medium,
-    color: Colors.textSecondary,
-  },
-  heightChipLabelActive: {
-    color: Colors.textOnPrimary,
-    fontWeight: FontWeight.bold,
-  },
-  notesVisibilityBtn: {
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
-    marginLeft: Spacing.lg,
-    paddingVertical: 4,
-    paddingHorizontal: Spacing.sm,
-    borderRadius: BorderRadius.sm,
+    justifyContent: 'space-between',
     backgroundColor: Colors.surfaceSecondary,
-    borderWidth: 1,
+  },
+  dropdownBtnOpen: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.white,
+  },
+  dropdownBtnContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  dropdownLabel: {
+    fontSize: FontSize.sm,
+    color: Colors.textSecondary,
+    fontWeight: FontWeight.medium,
+  },
+  selectedHeightBadge: {
+    backgroundColor: Colors.primarySurface,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.xs,
+  },
+  selectedHeightText: {
+    color: Colors.primary,
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.bold,
+  },
+  dropdownChevron: {
+    fontSize: 11,
+    color: Colors.textTertiary,
+  },
+  dropdownList: {
+    marginTop: Spacing.xs,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.surface,
+    overflow: 'hidden',
+    ...Shadows.md,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+  },
+  dropdownItemActive: {
+    backgroundColor: Colors.primarySurface,
+  },
+  dropdownItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  dropdownItemBadge: {
+    backgroundColor: Colors.surfaceSecondary,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.xs,
+    minWidth: 36,
+    alignItems: 'center',
+  },
+  dropdownItemBadgeActive: {
+    backgroundColor: Colors.primary,
+  },
+  dropdownItemBadgeText: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.bold,
+    color: Colors.textPrimary,
+  },
+  dropdownItemBadgeTextActive: {
+    color: Colors.textOnPrimary,
+  },
+  dropdownItemCount: {
+    fontSize: FontSize.xs,
+    color: Colors.textSecondary,
+  },
+  dropdownItemCountActive: {
+    color: Colors.primary,
+    fontWeight: FontWeight.semiBold,
+  },
+  dropdownCheckmark: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.bold,
+    color: Colors.primary,
+  },
+  notesVisibilityBtn: {
+    height: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.surfaceSecondary,
+    borderWidth: 1.5,
     borderColor: Colors.border,
     gap: Spacing.xs,
   },
@@ -724,7 +880,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.borderLight,
   },
   notesVisibilityIcon: {
-    fontSize: 12,
+    fontSize: 14,
   },
   notesVisibilityText: {
     fontSize: FontSize.xs,
@@ -733,6 +889,33 @@ const styles = StyleSheet.create({
   },
   notesVisibilityTextActive: {
     color: Colors.textTertiary,
+  },
+  groupFilterContainer: {
+    marginTop: Spacing.sm,
+  },
+  groupFilterRow: {
+    gap: Spacing.xs,
+  },
+  filterChip: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.surfaceSecondary,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  filterChipActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  filterChipText: {
+    fontSize: FontSize.xs,
+    color: Colors.textSecondary,
+    fontWeight: FontWeight.medium,
+  },
+  filterChipTextActive: {
+    color: Colors.white,
+    fontWeight: FontWeight.bold,
   },
   scrollContent: {
     padding: Spacing.lg,
@@ -751,6 +934,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderRadius: BorderRadius.lg,
     marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
     ...Shadows.sm,
     overflow: 'hidden',
   },
@@ -758,10 +943,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    backgroundColor: Colors.surfaceSecondary,
+    paddingVertical: Spacing.sm + 2,
+    backgroundColor: '#F8FAFC',
     borderBottomWidth: 1,
-    borderBottomColor: Colors.borderLight,
+    borderBottomColor: Colors.border,
+    borderLeftWidth: 3.5,
+    borderLeftColor: Colors.primary,
     gap: Spacing.md,
   },
   codeChip: {
@@ -771,6 +958,8 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.xs,
     minWidth: 48,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   codeText: {
     fontSize: FontSize.sm,
@@ -782,12 +971,14 @@ const styles = StyleSheet.create({
   },
   diveName: {
     fontSize: FontSize.md,
-    fontWeight: FontWeight.semiBold,
+    fontWeight: FontWeight.bold,
     color: Colors.textPrimary,
   },
   groupName: {
     fontSize: FontSize.xs,
     color: Colors.textSecondary,
+    fontWeight: FontWeight.medium,
+    marginTop: 1,
   },
   groupedExecList: {
     paddingHorizontal: Spacing.md,

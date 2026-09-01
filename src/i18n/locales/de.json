@@ -96,6 +96,7 @@
     "addDive": "Sprung hinzufügen",
     "noDives": "Noch keine Sprünge geplant.",
     "noDivesForHeight": "Keine Sprünge für diese Höhe.",
+    "noDivesForGroup": "Keine Sprünge für diese Gruppe vorhanden.",
     "statusPlanned": "Geplant",
     "statusLearning": "Im Aufbau",
     "statusMastered": "Sicher",

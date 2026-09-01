@@ -96,6 +96,7 @@
     "addDive": "Add Dive",
     "noDives": "No dives planned yet.",
     "noDivesForHeight": "No dives for this height.",
+    "noDivesForGroup": "No dives found for this group.",
     "statusPlanned": "Planned",
     "statusLearning": "Learning",
     "statusMastered": "Mastered",
