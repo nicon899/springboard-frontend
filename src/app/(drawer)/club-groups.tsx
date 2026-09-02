@@ -27,10 +27,10 @@ import ConfirmModal from '../../components/modals/ConfirmModal';
 
 export default function ClubGroupsScreen() {
   const { t } = useTranslation();
-  const { activeClubId, isTrainerOrAdmin } = useAuth();
+  const { activeClubId, activeClubMembership, isTrainerOrAdmin } = useAuth();
   const canManage = isTrainerOrAdmin();
 
-  const clubIdNum = activeClubId ? Number(activeClubId) : 0;
+  const clubIdNum = activeClubId ? Number(activeClubId) : (activeClubMembership?.clubId ? Number(activeClubMembership.clubId) : 0);
   const { groups, isLoading, createGroup, updateGroup, deleteGroup } = useClubAthleteGroups(clubIdNum);
   const { members } = useClubMembers(clubIdNum);
 

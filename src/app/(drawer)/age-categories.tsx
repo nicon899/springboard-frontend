@@ -57,10 +57,10 @@ function catToForm(cat: AgeCategoryResponse): AgeCatForm {
 import { useClubAgeCategories } from '../../hooks/useDataStore';
 
 export default function AgeCategoriesScreen() {
-  const { activeClubId, isTrainerOrAdmin } = useAuth();
+  const { activeClubId, activeClubMembership, isTrainerOrAdmin } = useAuth();
 
   const canEdit = isTrainerOrAdmin();
-  const clubIdNum = activeClubId ? Number(activeClubId) : 0;
+  const clubIdNum = activeClubId ? Number(activeClubId) : (activeClubMembership?.clubId ? Number(activeClubMembership.clubId) : 0);
 
   const {
     categories,
@@ -224,7 +224,7 @@ export default function AgeCategoriesScreen() {
         <View style={styles.clubBanner}>
           <Text style={styles.clubBannerLabel}>Verein</Text>
           <Text style={styles.clubBannerName}>
-            {activeClubMembership?.clubName ?? `Club #${clubId}`}
+            {activeClubMembership?.clubName ?? (clubIdNum ? `Club #${clubIdNum}` : '')}
           </Text>
         </View>
 

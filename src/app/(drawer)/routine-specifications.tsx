@@ -27,6 +27,7 @@ import {
   CreateRoutineSpecificationRequest,
   AgeCategoryResponse,
 } from '../../services/api';
+import { useClubSpecifications, useClubAgeCategories } from '../../hooks/useDataStore';
 import ConfirmModal from '../../components/modals/ConfirmModal';
 
 // ────────────────────────────────────────────────────────────
@@ -89,7 +90,7 @@ export default function RoutineSpecificationsScreen() {
   const { activeClubId, activeClubMembership, isTrainerOrAdmin } = useAuth();
 
   const canEdit = isTrainerOrAdmin();
-  const clubIdNum = activeClubId ? Number(activeClubId) : 0;
+  const clubIdNum = activeClubId ? Number(activeClubId) : (activeClubMembership?.clubId ? Number(activeClubMembership.clubId) : 0);
 
   const {
     specifications: specs,
@@ -285,7 +286,7 @@ export default function RoutineSpecificationsScreen() {
         <View style={styles.clubBanner}>
           <Text style={styles.clubBannerLabel}>{t('club.title', 'Verein')}</Text>
           <Text style={styles.clubBannerName}>
-            {activeClubMembership?.clubName ?? `Club #${clubId}`}
+            {activeClubMembership?.clubName ?? (clubIdNum ? `Club #${clubIdNum}` : '')}
           </Text>
         </View>
 
