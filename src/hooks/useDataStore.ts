@@ -16,6 +16,9 @@ import {
   UpdateRoutineSpecificationRequest,
   CreateAgeCategoryRequest,
   UpdateAgeCategoryRequest,
+  AthleteGroupResponse,
+  CreateAthleteGroupRequest,
+  UpdateAthleteGroupRequest,
 } from '../services/api';
 
 /**
@@ -344,6 +347,65 @@ export function useClubAgeCategories(clubId?: number | string | null) {
     createCategory,
     updateCategory,
     deleteCategory,
+  };
+}
+
+/**
+ * Dynamic Hook: Club Athlete Groups
+ */
+export function useClubAthleteGroups(clubId?: number | string | null) {
+  const numId = toNum(clubId);
+
+  const getSnapshot = useCallback(() => {
+    if (!numId) return EMPTY_ARRAY_ENTRY;
+    return dataStore.getClubAthleteGroupsSnapshot(numId);
+  }, [numId]);
+
+  const entry = useSyncExternalStore(dataStore.subscribe, getSnapshot, getSnapshot);
+
+  useEffect(() => {
+    if (numId) {
+      dataStore.fetchClubAthleteGroupsAsync(numId);
+    }
+  }, [numId]);
+
+  const refresh = useCallback(async () => {
+    if (!numId) return [];
+    return dataStore.fetchClubAthleteGroupsAsync(numId, true);
+  }, [numId]);
+
+  const createGroup = useCallback(
+    async (payload: CreateAthleteGroupRequest) => {
+      if (!numId) throw new Error('No club ID provided');
+      return dataStore.createAthleteGroup(numId, payload);
+    },
+    [numId]
+  );
+
+  const updateGroup = useCallback(
+    async (groupId: number, payload: UpdateAthleteGroupRequest) => {
+      if (!numId) throw new Error('No club ID provided');
+      return dataStore.updateAthleteGroup(numId, groupId, payload);
+    },
+    [numId]
+  );
+
+  const deleteGroup = useCallback(
+    async (groupId: number) => {
+      if (!numId) throw new Error('No club ID provided');
+      return dataStore.deleteAthleteGroup(numId, groupId);
+    },
+    [numId]
+  );
+
+  return {
+    groups: entry.data,
+    isLoading: entry.isLoading,
+    lastUpdated: entry.lastUpdated,
+    refresh,
+    createGroup,
+    updateGroup,
+    deleteGroup,
   };
 }
 

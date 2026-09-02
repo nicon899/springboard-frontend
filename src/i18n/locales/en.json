@@ -33,6 +33,7 @@
     "routineSpecifications": "Routine Specifications",
     "routines": "Routines",
     "ageCategories": "Age Categories",
+    "clubGroups": "Club-Wide Groups",
     "profile": "Profile"
   },
   "auth": {
@@ -460,5 +461,52 @@
     "diveStatusPlanned": "📋 {{dive}} added as planned dive 🎯",
     "systemAuthor": "System",
     "actionBy": "Action by {{trainer}}"
+  },
+  "trainer": {
+    "searchPlaceholder": "Search athletes...",
+    "noAthletes": "No athletes found",
+    "noMatchingAthletes": "No matching athletes found in this group.",
+    "athleteCard": {
+      "age": "{{age}} yrs",
+      "masteredCount": "{{count}} mastered",
+      "unreadComments": "{{count}} new",
+      "unreadCommentsSingle": "1 new"
+    }
+  },
+  "groups": {
+    "clubWideTitle": "Club-Wide Groups",
+    "clubWideSubtitle": "Visible to all members in the club",
+    "manageClubGroups": "Manage Club-Wide Groups",
+    "manageClubGroupsSub": "Assign athletes to club-wide groups",
+    "newGroup": "New Group",
+    "createClubGroup": "New Club-Wide Group",
+    "editGroup": "Edit Group",
+    "noClubGroups": "No Club-Wide Groups",
+    "noClubGroupsText": "No groups have been created in this club yet.",
+    "createFirstClubGroup": "Create the first club-wide group for your club.",
+    "scopeClubWide": "Club-wide",
+    "scopeTrainer": "Coach Group",
+    "athleteSingle": "Athlete",
+    "athletePlural": "Athletes",
+    "noAthletesAssigned": "No athletes assigned",
+    "noGroup": "No group",
+    "nameLabel": "Group Name",
+    "namePlaceholder": "e.g. Competitive Team A, Juniors...",
+    "trainerNamePlaceholder": "e.g. My Training Group A...",
+    "assignAthletes": "Assign Athletes",
+    "searchAthletes": "Search athletes...",
+    "selectAll": "All",
+    "deselectAll": "None",
+    "deleteTitle": "Delete Group",
+    "deleteMessage": "Do you really want to delete group \"{{name}}\"? Athletes will remain members of the club.",
+    "errorNameRequired": "Group name is required",
+    "myGroupsBtn": "My Groups",
+    "myTrainerGroups": "My Coach Groups",
+    "trainerScopeHint": "Only visible to you on your coach dashboard",
+    "noTrainerGroupsYet": "No coach groups yet",
+    "createTrainerGroupHint": "Create personal groups to quickly filter your athletes.",
+    "newTrainerGroup": "Create Coach Group",
+    "createTrainerGroup": "New Coach Group",
+    "editTrainerGroup": "Edit Coach Group"
   }
 }

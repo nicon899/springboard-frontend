@@ -123,12 +123,25 @@ export default function ClubScreen() {
         </View>
       )}
 
-      {/* Serienspezifikationen (für Trainer & Admins) */}
+      {/* Gruppen & Serienspezifikationen (für Trainer & Admins) */}
       {canManageSpecs && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Serienspezifikationen</Text>
+          <Text style={styles.sectionTitle}>Gruppen & Spezifikationen</Text>
           <TouchableOpacity
             style={styles.specsBtn}
+            onPress={() => router.push('/(drawer)/club-groups' as any)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.specsBtnIcon}>👥</Text>
+            <View style={styles.specsBtnInfo}>
+              <Text style={styles.specsBtnLabel}>{t('groups.manageClubGroups', 'Vereinsweite Gruppen verwalten')}</Text>
+              <Text style={styles.specsBtnSub}>{t('groups.manageClubGroupsSub', 'Sportler vereinsweiten Gruppen zuordnen')}</Text>
+            </View>
+            <Text style={styles.specsBtnArrow}>›</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.specsBtn, { marginTop: Spacing.sm }]}
             onPress={() => router.push('/(drawer)/routine-specifications' as any)}
             activeOpacity={0.8}
           >

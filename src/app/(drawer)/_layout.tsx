@@ -303,6 +303,19 @@ export default function DrawerLayout() {
         }}
       />
       <Drawer.Screen
+        name="club-groups"
+        options={{
+          title: t('nav.clubGroups', 'Vereinsweite Gruppen'),
+          drawerItemStyle: styles.hidden,
+          headerLeft: ({ tintColor }) => (
+            <HeaderBackButton
+              tintColor={tintColor}
+              fallbackRoute="/(drawer)/club"
+            />
+          ),
+        }}
+      />
+      <Drawer.Screen
         name="index"
         options={{ drawerItemStyle: styles.hidden, title: '' }}
       />

@@ -33,6 +33,7 @@
     "routineSpecifications": "Serienspezifikationen",
     "routines": "Serien",
     "ageCategories": "Altersklassen",
+    "clubGroups": "Vereinsweite Gruppen",
     "profile": "Profil"
   },
   "auth": {
@@ -465,5 +466,52 @@
     "diveStatusPlanned": "📋 {{dive}} als neues Ziel aufgenommen 🎯",
     "systemAuthor": "System",
     "actionBy": "Aktion von {{trainer}}"
+  },
+  "trainer": {
+    "searchPlaceholder": "Sportler suchen...",
+    "noAthletes": "Keine Sportler vorhanden",
+    "noMatchingAthletes": "Keine passenden Sportler in dieser Gruppe gefunden.",
+    "athleteCard": {
+      "age": "{{age}} Jahre",
+      "masteredCount": "{{count}} gemeistert",
+      "unreadComments": "{{count}} neue",
+      "unreadCommentsSingle": "1 neu"
+    }
+  },
+  "groups": {
+    "clubWideTitle": "Vereinsweite Gruppen",
+    "clubWideSubtitle": "Für alle Mitglieder im Verein sichtbar",
+    "manageClubGroups": "Vereinsweite Gruppen verwalten",
+    "manageClubGroupsSub": "Sportler vereinsweiten Gruppen zuordnen",
+    "newGroup": "Neue Gruppe",
+    "createClubGroup": "Neue vereinsweite Gruppe",
+    "editGroup": "Gruppe bearbeiten",
+    "noClubGroups": "Keine vereinsweiten Gruppen",
+    "noClubGroupsText": "In diesem Verein wurden noch keine Gruppen angelegt.",
+    "createFirstClubGroup": "Erstelle die erste vereinsweite Gruppe für deinen Verein.",
+    "scopeClubWide": "Vereinsweit",
+    "scopeTrainer": "Trainergruppe",
+    "athleteSingle": "Sportler",
+    "athletePlural": "Sportler",
+    "noAthletesAssigned": "Keine Sportler zugeordnet",
+    "noGroup": "Keine Gruppe",
+    "nameLabel": "Gruppenname",
+    "namePlaceholder": "z.B. Wettkampfteam A, Nachwuchs...",
+    "trainerNamePlaceholder": "z.B. Meine Trainingsgruppe A...",
+    "assignAthletes": "Sportler zuordnen",
+    "searchAthletes": "Sportler suchen...",
+    "selectAll": "Alle",
+    "deselectAll": "Keine",
+    "deleteTitle": "Gruppe löschen",
+    "deleteMessage": "Möchtest du die Gruppe „{{name}}“ wirklich löschen? Die Sportler bleiben im Verein erhalten.",
+    "errorNameRequired": "Gruppenname ist erforderlich",
+    "myGroupsBtn": "Meine Gruppen",
+    "myTrainerGroups": "Meine Trainergruppen",
+    "trainerScopeHint": "Nur für dich im Trainer-Dashboard sichtbar",
+    "noTrainerGroupsYet": "Noch keine Trainergruppen",
+    "createTrainerGroupHint": "Erstelle persönliche Gruppen, um deine Trainingsgruppen schnell zu filtern.",
+    "newTrainerGroup": "Neue Trainergruppe erstellen",
+    "createTrainerGroup": "Neue Trainergruppe",
+    "editTrainerGroup": "Trainergruppe bearbeiten"
   }
 }

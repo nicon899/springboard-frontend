@@ -16,6 +16,9 @@ import {
   UpdateRoutineSpecificationRequest,
   CreateAgeCategoryRequest,
   UpdateAgeCategoryRequest,
+  AthleteGroupResponse,
+  CreateAthleteGroupRequest,
+  UpdateAthleteGroupRequest,
 } from './api';
 
 // ────────────────────────────────────────────────────────────
@@ -85,6 +88,9 @@ class CentralDataStore {
 
   private clubAgeCategories: Map<number, StoreEntry<AgeCategoryResponse[]>> = new Map();
   private clubAgeCategoriesPromises: Map<number, Promise<AgeCategoryResponse[]>> = new Map();
+
+  private clubAthleteGroups: Map<number, StoreEntry<AthleteGroupResponse[]>> = new Map();
+  private clubAthleteGroupsPromises: Map<number, Promise<AthleteGroupResponse[]>> = new Map();
 
   private clubUnreadCounts: Map<number, StoreEntry<Record<string, number>>> = new Map();
   private clubUnreadCountsPromises: Map<number, Promise<Record<string, number>>> = new Map();
@@ -470,6 +476,47 @@ class CentralDataStore {
       });
 
     this.clubAgeCategoriesPromises.set(numId, promise);
+    return promise;
+  };
+
+  public getClubAthleteGroupsSnapshot = (clubId?: number | string | null): StoreEntry<AthleteGroupResponse[]> => {
+    const numId = toNum(clubId);
+    if (!numId) return EMPTY_ARRAY_ENTRY;
+    return this.clubAthleteGroups.get(numId) || EMPTY_ARRAY_ENTRY;
+  };
+
+  public fetchClubAthleteGroupsAsync = async (clubId?: number | string | null, forceRefresh = false): Promise<AthleteGroupResponse[]> => {
+    const numId = toNum(clubId);
+    if (!numId) return [];
+
+    const entry = this.clubAthleteGroups.get(numId);
+    const now = Date.now();
+    const isStale = !entry || now - entry.lastUpdated > this.DYNAMIC_STALE_MS;
+
+    if (!isStale && !forceRefresh && entry) {
+      return entry.data;
+    }
+
+    if (this.clubAthleteGroupsPromises.has(numId)) {
+      return this.clubAthleteGroupsPromises.get(numId)!;
+    }
+
+    const promise = api.getAthleteGroups(numId)
+      .then((data) => {
+        this.clubAthleteGroups.set(numId, { data, isLoading: false, lastUpdated: Date.now() });
+        this.clubAthleteGroupsPromises.delete(numId);
+        this.notify();
+        return data;
+      })
+      .catch((err) => {
+        this.clubAthleteGroupsPromises.delete(numId);
+        const fallback = entry?.data || [];
+        this.clubAthleteGroups.set(numId, { data: fallback, isLoading: false, lastUpdated: Date.now() });
+        this.notify();
+        return fallback;
+      });
+
+    this.clubAthleteGroupsPromises.set(numId, promise);
     return promise;
   };
 
@@ -901,6 +948,63 @@ class CentralDataStore {
     if (existing) {
       const newData = existing.data.filter((c) => c.id !== catId);
       this.clubAgeCategories.set(numId, { data: newData, isLoading: false, lastUpdated: Date.now() });
+      this.notify();
+    }
+  };
+
+  public createAthleteGroup = async (
+    clubId: number | string,
+    payload: CreateAthleteGroupRequest
+  ): Promise<AthleteGroupResponse> => {
+    const numId = toNum(clubId);
+    if (!numId) throw new Error('Invalid club ID');
+
+    const created = await api.createAthleteGroup(numId, payload);
+    const existing = this.clubAthleteGroups.get(numId);
+    if (existing) {
+      this.clubAthleteGroups.set(numId, {
+        data: [...existing.data, created],
+        isLoading: false,
+        lastUpdated: Date.now(),
+      });
+    } else {
+      this.clubAthleteGroups.set(numId, {
+        data: [created],
+        isLoading: false,
+        lastUpdated: Date.now(),
+      });
+    }
+    this.notify();
+    return created;
+  };
+
+  public updateAthleteGroup = async (
+    clubId: number | string,
+    groupId: number,
+    payload: UpdateAthleteGroupRequest
+  ): Promise<AthleteGroupResponse> => {
+    const numId = toNum(clubId);
+    if (!numId) throw new Error('Invalid club ID');
+
+    const updated = await api.updateAthleteGroup(numId, groupId, payload);
+    const existing = this.clubAthleteGroups.get(numId);
+    if (existing) {
+      const newData = existing.data.map((g) => (g.id === groupId ? updated : g));
+      this.clubAthleteGroups.set(numId, { data: newData, isLoading: false, lastUpdated: Date.now() });
+      this.notify();
+    }
+    return updated;
+  };
+
+  public deleteAthleteGroup = async (clubId: number | string, groupId: number): Promise<void> => {
+    const numId = toNum(clubId);
+    if (!numId) throw new Error('Invalid club ID');
+
+    await api.deleteAthleteGroup(numId, groupId);
+    const existing = this.clubAthleteGroups.get(numId);
+    if (existing) {
+      const newData = existing.data.filter((g) => g.id !== groupId);
+      this.clubAthleteGroups.set(numId, { data: newData, isLoading: false, lastUpdated: Date.now() });
       this.notify();
     }
   };

@@ -219,6 +219,32 @@ export interface UpdateAgeCategoryRequest {
   toYearOffset?: number;
 }
 
+// ── Athlete Groups (Sportlergruppen) ──
+export type GroupScope = 'CLUB_WIDE' | 'TRAINER';
+
+export interface AthleteGroupResponse {
+  id: number;
+  clubId: number;
+  name: string;
+  scope: GroupScope;
+  creatorId?: number;
+  creatorName?: string;
+  athleteIds: number[];
+  memberCount: number;
+  createdAt: string;
+}
+
+export interface CreateAthleteGroupRequest {
+  name: string;
+  scope: GroupScope;
+  athleteIds?: number[];
+}
+
+export interface UpdateAthleteGroupRequest {
+  name?: string;
+  athleteIds?: number[];
+}
+
 // ── Routine Specifications (Serienspezifikationen) ──
 export interface RoutineSpecificationResponse {
   id: number;
@@ -837,6 +863,37 @@ export const api = {
 
   async deleteAgeCategory(id: number | string): Promise<void> {
     return request<void>(`/api/v1/age-categories/${id}`, { method: 'DELETE' });
+  },
+
+  // ── Athlete Groups (Sportlergruppen) ──
+  async getAthleteGroups(clubId: number | string): Promise<AthleteGroupResponse[]> {
+    return request<AthleteGroupResponse[]>(`/api/v1/clubs/${clubId}/groups`);
+  },
+
+  async getAthleteGroupById(clubId: number | string, groupId: number | string): Promise<AthleteGroupResponse> {
+    return request<AthleteGroupResponse>(`/api/v1/clubs/${clubId}/groups/${groupId}`);
+  },
+
+  async createAthleteGroup(clubId: number | string, payload: CreateAthleteGroupRequest): Promise<AthleteGroupResponse> {
+    return request<AthleteGroupResponse>(`/api/v1/clubs/${clubId}/groups`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async updateAthleteGroup(
+    clubId: number | string,
+    groupId: number | string,
+    payload: UpdateAthleteGroupRequest
+  ): Promise<AthleteGroupResponse> {
+    return request<AthleteGroupResponse>(`/api/v1/clubs/${clubId}/groups/${groupId}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async deleteAthleteGroup(clubId: number | string, groupId: number | string): Promise<void> {
+    return request<void>(`/api/v1/clubs/${clubId}/groups/${groupId}`, { method: 'DELETE' });
   },
 };
 
