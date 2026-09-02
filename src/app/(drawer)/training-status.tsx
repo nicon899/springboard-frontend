@@ -27,7 +27,7 @@ import {
   BACKEND_TO_HEIGHT,
   CommentResponse,
 } from '../../services/api';
-import { isSystemComment, formatCommentContent } from '../../services/commentUtils';
+import { isSystemComment, formatCommentContent, getSystemCommentActor } from '../../services/commentUtils';
 import {
   useAthleteDives,
   useAthleteComments,
@@ -479,6 +479,7 @@ export default function TrainingStatusScreen() {
               <View style={styles.commentsList}>
                 {visibleComments.map((comment) => {
                   const isSystem = isSystemComment(comment);
+                  const systemActor = isSystem ? getSystemCommentActor(comment.content) : null;
                   const diveInfo = comment.athleteDiveStatusId
                     ? athleteDiveStatusMap.get(comment.athleteDiveStatusId)
                     : undefined;
@@ -512,11 +513,20 @@ export default function TrainingStatusScreen() {
                       {/* Kommentar Card Header */}
                       <View style={styles.commentCardHeader}>
                         <View style={styles.commentAuthorCol}>
-                          <Text style={styles.commentAuthor}>
-                            {isSystem
-                              ? `🤖 ${t('systemComments.systemAuthor', 'System')}`
-                              : `👤 ${comment.authorName || 'Trainer'}`}
-                          </Text>
+                          <View style={styles.commentAuthorRow}>
+                            <Text style={styles.commentAuthor}>
+                              {isSystem
+                                ? `🤖 ${t('systemComments.systemAuthor', 'System')}`
+                                : `👤 ${comment.authorName || 'Trainer'}`}
+                            </Text>
+                            {isSystem && systemActor && (
+                              <View style={styles.systemActorBadge}>
+                                <Text style={styles.systemActorBadgeText}>
+                                  👤 {systemActor}
+                                </Text>
+                              </View>
+                            )}
+                          </View>
                           <Text style={styles.commentDate}>{dateFormatted}</Text>
                         </View>
 
@@ -598,7 +608,7 @@ export default function TrainingStatusScreen() {
 
                       {/* Kommentar Inhalt */}
                       <Text style={[styles.commentContent, isPrivate && styles.commentContentPrivate]}>
-                        {formatCommentContent(comment.content, t)}
+                        {formatCommentContent(comment.content, t, i18n.language)}
                       </Text>
                     </View>
                   );
@@ -891,6 +901,20 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.bold,
     color: '#B45309',
   },
+  systemActorBadge: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 1,
+    alignSelf: 'center',
+  },
+  systemActorBadgeText: {
+    fontSize: FontSize.xs - 1,
+    fontWeight: FontWeight.medium,
+    color: Colors.textSecondary,
+  },
   commentCardPrivate: {
     backgroundColor: '#FFFDF0',
     borderColor: '#FFE082',
@@ -906,6 +930,12 @@ const styles = StyleSheet.create({
   commentAuthorCol: {
     flex: 1,
     minWidth: 120,
+  },
+  commentAuthorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    flexWrap: 'wrap',
   },
   commentAuthor: {
     fontSize: FontSize.sm,

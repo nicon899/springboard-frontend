@@ -17,51 +17,66 @@ export function isSystemComment(comment?: Partial<CommentResponse> | null): bool
 }
 
 /**
+ * Extracts the actor (trainer name) who triggered the system action from a system comment payload.
+ */
+export function getSystemCommentActor(content?: string | null): string | null {
+  if (!content) return null;
+  if (content.startsWith('{"key":"SYSTEM_DIVE_STATUS"') || content.startsWith('{"key": "SYSTEM_DIVE_STATUS"')) {
+    try {
+      const data = JSON.parse(content);
+      if (data.trainer && typeof data.trainer === 'string' && data.trainer.trim().length > 0) {
+        return data.trainer.trim();
+      }
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
  * Formats comment content. If the comment contains a system key payload,
  * it is localized using i18next according to the current user's language settings.
  */
-export function formatCommentContent(content: string, t: TFunction | ((key: string, options?: any) => string)): string {
+export function formatCommentContent(
+  content: string,
+  t: TFunction | ((key: string, options?: any) => string),
+  language: string = 'de'
+): string {
   if (!content) return '';
 
   if (content.startsWith('{"key":"SYSTEM_DIVE_STATUS"') || content.startsWith('{"key": "SYSTEM_DIVE_STATUS"')) {
     try {
       const data = JSON.parse(content);
-      const { status, dive, trainer } = data;
-      const hasTrainer = Boolean(trainer && String(trainer).trim().length > 0);
+      const { status, diveCode, height, nameDe, nameEn, dive } = data;
+
+      const isDE = language.startsWith('de');
+      const localizedName = isDE ? (nameDe || nameEn) : (nameEn || nameDe);
+
+      let diveDisplay = '';
+      if (diveCode && height) {
+        diveDisplay = localizedName ? `${diveCode} (${height} – ${localizedName})` : `${diveCode} (${height})`;
+      } else if (dive) {
+        diveDisplay = dive;
+      } else if (diveCode) {
+        diveDisplay = diveCode;
+      }
 
       if (status === 'MASTERED') {
-        return hasTrainer
-          ? t('systemComments.diveStatusMastered', {
-              dive,
-              trainer,
-              defaultValue: `🎯 ${dive} erfolgreich gemeistert! (von ${trainer}) 👏`,
-            })
-          : t('systemComments.diveStatusMasteredNoTrainer', {
-              dive,
-              defaultValue: `🎯 ${dive} erfolgreich gemeistert! 👏`,
-            });
+        return t('systemComments.diveStatusMastered', {
+          dive: diveDisplay,
+          defaultValue: `🎯 ${diveDisplay} erfolgreich gemeistert! 👏`,
+        });
       } else if (status === 'LEARNING') {
-        return hasTrainer
-          ? t('systemComments.diveStatusLearning', {
-              dive,
-              trainer,
-              defaultValue: `💪 Training für ${dive} gestartet. Weiter so! (von ${trainer}) 🚀`,
-            })
-          : t('systemComments.diveStatusLearningNoTrainer', {
-              dive,
-              defaultValue: `💪 Training für ${dive} gestartet. Weiter so! 🚀`,
-            });
+        return t('systemComments.diveStatusLearning', {
+          dive: diveDisplay,
+          defaultValue: `💪 Training für ${diveDisplay} gestartet. Weiter so! 🚀`,
+        });
       } else if (status === 'PLANNED') {
-        return hasTrainer
-          ? t('systemComments.diveStatusPlanned', {
-              dive,
-              trainer,
-              defaultValue: `📋 ${dive} als neues Ziel aufgenommen (von ${trainer}) 🎯`,
-            })
-          : t('systemComments.diveStatusPlannedNoTrainer', {
-              dive,
-              defaultValue: `📋 ${dive} als neues Ziel aufgenommen 🎯`,
-            });
+        return t('systemComments.diveStatusPlanned', {
+          dive: diveDisplay,
+          defaultValue: `📋 ${diveDisplay} als neues Ziel aufgenommen 🎯`,
+        });
       }
     } catch {
       // Return raw content if parsing fails

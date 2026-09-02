@@ -455,12 +455,10 @@
     }
   },
   "systemComments": {
-    "diveStatusMastered": "🎯 {{dive}} successfully mastered! (by {{trainer}}) 👏",
-    "diveStatusMasteredNoTrainer": "🎯 {{dive}} successfully mastered! 👏",
-    "diveStatusLearning": "💪 Started training {{dive}}. Keep it up! (by {{trainer}}) 🚀",
-    "diveStatusLearningNoTrainer": "💪 Started training {{dive}}. Keep it up! 🚀",
-    "diveStatusPlanned": "📋 {{dive}} added as planned dive (by {{trainer}}) 🎯",
-    "diveStatusPlannedNoTrainer": "📋 {{dive}} added as planned dive 🎯",
-    "systemAuthor": "System"
+    "diveStatusMastered": "🎯 {{dive}} successfully mastered! 👏",
+    "diveStatusLearning": "💪 Started training {{dive}}. Keep it up! 🚀",
+    "diveStatusPlanned": "📋 {{dive}} added as planned dive 🎯",
+    "systemAuthor": "System",
+    "actionBy": "Action by {{trainer}}"
   }
 }
