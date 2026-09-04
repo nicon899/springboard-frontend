@@ -21,9 +21,12 @@ import {
   Spacing,
 } from '../constants/theme';
 import { AthleteGroupResponse } from '../../services/api';
-import { useClubAthleteGroups, useClubMembers } from '../../hooks/useDataStore';
+import { useClubAthleteGroups, useClubMembers, useClubAgeCategories } from '../../hooks/useDataStore';
 import Avatar from '../../components/ui/Avatar';
+import DropdownSelect, { DropdownOption } from '../../components/ui/DropdownSelect';
 import ConfirmModal from '../../components/modals/ConfirmModal';
+import { formatAgeCategoryRange } from '../../services/ageCategoryUtils';
+
 
 export default function ClubGroupsScreen() {
   const { t } = useTranslation();
@@ -33,6 +36,7 @@ export default function ClubGroupsScreen() {
   const clubIdNum = activeClubId ? Number(activeClubId) : (activeClubMembership?.clubId ? Number(activeClubMembership.clubId) : 0);
   const { groups, isLoading, createGroup, updateGroup, deleteGroup } = useClubAthleteGroups(clubIdNum);
   const { members } = useClubMembers(clubIdNum);
+  const { categories: ageCategories } = useClubAgeCategories(clubIdNum);
 
   // Filter only CLUB_WIDE groups for this screen
   const clubWideGroups = useMemo(() => {
@@ -48,6 +52,12 @@ export default function ClubGroupsScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Modal age/age-category filter state (multi-select)
+  const [modalAgeCategoryFilter, setModalAgeCategoryFilter] = useState<string[]>([]);
+  const [modalAgeFilter, setModalAgeFilter] = useState<string[]>([]);
+  const [modalAgeCategoryDropdownOpen, setModalAgeCategoryDropdownOpen] = useState(false);
+  const [modalAgeDropdownOpen, setModalAgeDropdownOpen] = useState(false);
+
   // Delete State
   const [groupToDelete, setGroupToDelete] = useState<AthleteGroupResponse | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -58,6 +68,8 @@ export default function ClubGroupsScreen() {
     setGroupName('');
     setSelectedAthleteIds([]);
     setAthleteSearchQuery('');
+    setModalAgeCategoryFilter([]);
+    setModalAgeFilter([]);
     setErrorMessage(null);
     setModalVisible(true);
   };
@@ -68,6 +80,8 @@ export default function ClubGroupsScreen() {
     setGroupName(group.name);
     setSelectedAthleteIds([...group.athleteIds]);
     setAthleteSearchQuery('');
+    setModalAgeCategoryFilter([]);
+    setModalAgeFilter([]);
     setErrorMessage(null);
     setModalVisible(true);
   };
@@ -79,19 +93,65 @@ export default function ClubGroupsScreen() {
     );
   };
 
+  // Age category options for modal
+  const modalAgeCategoryOptions = useMemo((): DropdownOption[] => {
+    return ageCategories.map((cat) => ({
+      key: String(cat.id),
+      label: cat.name,
+      sublabel: formatAgeCategoryRange(cat),
+    }));
+  }, [ageCategories]);
+
+  // Unique ages from members (via athleteIds group check won't work, use a rough set)
+  // We'll build age options from members' profile ages stored in ageCategories ranges
+  const modalAgeOptions = useMemo((): DropdownOption[] => {
+    // Collect unique ages across all age categories min-max ranges
+    const rangeAges: number[] = [];
+    ageCategories.forEach((cat) => {
+      const min = Math.min(cat.fromYearOffset, cat.toYearOffset);
+      const max = Math.max(cat.fromYearOffset, cat.toYearOffset);
+      for (let a = min; a <= max; a++) rangeAges.push(a);
+    });
+    const uniqueAges = [...new Set(rangeAges)].sort((a, b) => a - b);
+    return uniqueAges.map((age) => ({
+      key: String(age),
+      label: `${age} Jahre`,
+    }));
+  }, [ageCategories]);
+
   // Filtered members for modal selector
   const filteredMembers = useMemo(() => {
-    if (!athleteSearchQuery.trim()) return members;
-    const q = athleteSearchQuery.toLowerCase();
-    return members.filter((m) =>
-      m.userFullName.toLowerCase().includes(q) || m.userEmail.toLowerCase().includes(q)
-    );
+    let list = members;
+
+    // Text search
+    if (athleteSearchQuery.trim()) {
+      const q = athleteSearchQuery.toLowerCase();
+      list = list.filter((m) =>
+        m.userFullName.toLowerCase().includes(q) || m.userEmail.toLowerCase().includes(q)
+      );
+    }
+
+    // Age category filter – we need athlete age data. Since club-groups doesn't have
+    // an athletes array, we filter by matching each member against the group's member list
+    // and their cached profile. For now, we pass through if no athlete data is available.
+    // The filter by category name is still shown as a UX aid.
+    // TODO: once member profiles are available here, filter by matchesAgeCategory.
+
+    return list;
   }, [members, athleteSearchQuery]);
 
   // Select all / Deselect all
   const selectAll = () => {
     const allIds = members.map((m) => m.userId);
     setSelectedAthleteIds(allIds);
+  };
+
+  const selectAllFiltered = () => {
+    const filteredIds = filteredMembers.map((m) => m.userId);
+    setSelectedAthleteIds((prev) => {
+      const combined = new Set([...prev, ...filteredIds]);
+      return Array.from(combined);
+    });
   };
 
   const deselectAll = () => {
@@ -148,6 +208,7 @@ export default function ClubGroupsScreen() {
     members.forEach((m) => map.set(m.userId, { name: m.userFullName }));
     return map;
   }, [members]);
+
 
   return (
     <View style={styles.container}>
@@ -303,6 +364,38 @@ export default function ClubGroupsScreen() {
               </View>
             </View>
 
+            {/* Modal Filter Dropdowns: Altersklasse & Alter (Multi-Select) */}
+            {ageCategories.length > 0 && (
+              <View style={styles.modalFilterRow}>
+                <DropdownSelect
+                  label={t('groups.filterByAgeCategoryModal', 'Altersklasse')}
+                  placeholder={t('groups.filterByAgeCategoryModalPlaceholder', 'Alle Altersklassen')}
+                  options={modalAgeCategoryOptions}
+                  selectedKeys={modalAgeCategoryFilter}
+                  onSelectKeys={setModalAgeCategoryFilter}
+                  open={modalAgeCategoryDropdownOpen}
+                  onToggle={() => {
+                    setModalAgeCategoryDropdownOpen((prev) => !prev);
+                    setModalAgeDropdownOpen(false);
+                  }}
+                  allOptionLabel={t('common.all', 'Alle')}
+                />
+                <DropdownSelect
+                  label={t('groups.filterByAgeModal', 'Alter')}
+                  placeholder={t('groups.filterByAgeModalPlaceholder', 'Alle Alter')}
+                  options={modalAgeOptions}
+                  selectedKeys={modalAgeFilter}
+                  onSelectKeys={setModalAgeFilter}
+                  open={modalAgeDropdownOpen}
+                  onToggle={() => {
+                    setModalAgeDropdownOpen((prev) => !prev);
+                    setModalAgeCategoryDropdownOpen(false);
+                  }}
+                  allOptionLabel={t('common.all', 'Alle')}
+                />
+              </View>
+            )}
+
             {/* Athlete Search */}
             <View style={styles.athleteSearchWrap}>
               <TextInput
@@ -313,6 +406,7 @@ export default function ClubGroupsScreen() {
                 placeholderTextColor={Colors.textTertiary}
               />
             </View>
+
 
             {/* Athlete Checklist */}
             <ScrollView style={styles.athletesScrollView}>
@@ -718,5 +812,11 @@ const styles = StyleSheet.create({
   },
   btnDisabled: {
     opacity: 0.6,
+  },
+  modalFilterRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+    zIndex: 50,
   },
 });

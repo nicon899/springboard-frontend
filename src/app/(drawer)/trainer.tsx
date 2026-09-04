@@ -14,7 +14,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import Avatar from '../../components/ui/Avatar';
-import FilterChip from '../../components/ui/FilterChip';
+import DropdownSelect, { DropdownOption } from '../../components/ui/DropdownSelect';
 import ConfirmModal from '../../components/modals/ConfirmModal';
 import {
   BorderRadius,
@@ -26,8 +26,10 @@ import {
 } from '../constants/theme';
 import { AthleteListItem } from '../types/user';
 import { AthleteGroupResponse } from '../../services/api';
-import { useClubMembers, useClubAthleteGroups } from '../../hooks/useDataStore';
+import { useClubMembers, useClubAthleteGroups, useClubAgeCategories } from '../../hooks/useDataStore';
 import { dataStore } from '../../services/dataStore';
+import { formatAgeCategoryLabel, formatAgeCategoryRange, matchesAgeCategory } from '../../services/ageCategoryUtils';
+
 
 export default function TrainerScreen() {
   const { t } = useTranslation();
@@ -46,11 +48,17 @@ export default function TrainerScreen() {
     deleteGroup,
     refresh: refreshGroups,
   } = useClubAthleteGroups(clubIdNum);
+  const { categories: ageCategories } = useClubAgeCategories(clubIdNum);
 
   const [athletes, setAthletes] = useState<AthleteListItem[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState<string>('ALL');
+
+  // Dashboard filter dropdowns (multi-select)
+  const [activeGroupKeys, setActiveGroupKeys] = useState<string[]>([]);
+  const [selectedAgeCategoryIds, setSelectedAgeCategoryIds] = useState<string[]>([]);
+  const [groupDropdownOpen, setGroupDropdownOpen] = useState(false);
+  const [ageCategoryDropdownOpen, setAgeCategoryDropdownOpen] = useState(false);
 
   // Trainer Group Management Modal State
   const [manageModalVisible, setManageModalVisible] = useState(false);
@@ -62,9 +70,17 @@ export default function TrainerScreen() {
   const [isSavingGroup, setIsSavingGroup] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  // Modal athlete filter dropdowns (multi-select)
+  const [modalAgeCategoryFilter, setModalAgeCategoryFilter] = useState<string[]>([]);
+  const [modalAgeFilter, setModalAgeFilter] = useState<string[]>([]);
+  const [modalAgeCategoryDropdownOpen, setModalAgeCategoryDropdownOpen] = useState(false);
+  const [modalAgeDropdownOpen, setModalAgeDropdownOpen] = useState(false);
+
   // Delete Group State
   const [groupToDelete, setGroupToDelete] = useState<AthleteGroupResponse | null>(null);
   const [isDeletingGroup, setIsDeletingGroup] = useState(false);
+
+
 
   useEffect(() => {
     if (user && !isTrainerOrAdmin()) {
@@ -149,15 +165,22 @@ export default function TrainerScreen() {
     }, [clubId, refreshMembers, refreshGroups])
   );
 
-  // Filter athletes by group and search query
+  // Filter athletes by group, age category, and search query
   const filteredAthletes = useMemo(() => {
     let list = athletes;
 
-    if (activeFilter !== 'ALL') {
-      const targetGroup = groups.find((g) => String(g.id) === activeFilter);
-      if (targetGroup) {
-        list = list.filter((a) => targetGroup.athleteIds.includes(Number(a.id)));
-      }
+    // Group filter: athlete must be in AT LEAST ONE of the selected groups
+    if (activeGroupKeys.length > 0) {
+      const selectedGroups = groups.filter((g) => activeGroupKeys.includes(String(g.id)));
+      list = list.filter((a) =>
+        selectedGroups.some((g) => g.athleteIds.includes(Number(a.id)))
+      );
+    }
+
+    // Age category filter: athlete matches AT LEAST ONE selected category
+    if (selectedAgeCategoryIds.length > 0) {
+      const selectedCats = ageCategories.filter((c) => selectedAgeCategoryIds.includes(String(c.id)));
+      list = list.filter((a) => selectedCats.some((cat) => matchesAgeCategory(a.age, cat)));
     }
 
     if (searchQuery.trim()) {
@@ -169,24 +192,47 @@ export default function TrainerScreen() {
       );
     }
     return list;
-  }, [athletes, searchQuery, activeFilter, groups]);
+  }, [athletes, searchQuery, activeGroupKeys, selectedAgeCategoryIds, groups, ageCategories]);
 
-  // Dynamic filter chips: "Alle" + each group
-  const filterChips = useMemo(() => {
-    const chips: { key: string; label: string }[] = [
-      { key: 'ALL', label: t('common.all', 'Alle') },
-    ];
+  // Group dropdown options
+  const groupDropdownOptions = useMemo((): DropdownOption[] => {
+    return groups.map((g) => ({
+      key: String(g.id),
+      label: `${g.scope === 'CLUB_WIDE' ? '🏆 ' : '👤 '}${g.name}`,
+      count: g.memberCount,
+    }));
+  }, [groups]);
 
-    groups.forEach((g) => {
-      const prefix = g.scope === 'CLUB_WIDE' ? '🏆 ' : '👤 ';
-      chips.push({
-        key: String(g.id),
-        label: `${prefix}${g.name} (${g.memberCount})`,
-      });
+  // Age category dropdown options for the dashboard (with matching athlete count)
+  const ageCategoryDropdownOptions = useMemo((): DropdownOption[] => {
+    return ageCategories.map((cat) => {
+      const count = athletes.filter((a) => matchesAgeCategory(a.age, cat)).length;
+      return {
+        key: String(cat.id),
+        label: cat.name,
+        sublabel: formatAgeCategoryRange(cat),
+        count,
+      };
     });
+  }, [ageCategories, athletes]);
 
-    return chips;
-  }, [groups, t]);
+  // Age category options for modal member filter
+  const modalAgeCategoryOptions = useMemo((): DropdownOption[] => {
+    return ageCategories.map((cat) => ({
+      key: String(cat.id),
+      label: cat.name,
+      sublabel: formatAgeCategoryRange(cat),
+    }));
+  }, [ageCategories]);
+
+  // Unique age values from all members (from athletes state) for modal filter
+  const modalAgeOptions = useMemo((): DropdownOption[] => {
+    const ages = [...new Set(athletes.map((a) => a.age))].sort((a, b) => a - b);
+    return ages.map((age) => ({
+      key: String(age),
+      label: `${age} Jahre`,
+    }));
+  }, [athletes]);
 
   // Open Create Trainer Group Modal
   const openCreateTrainerGroup = () => {
@@ -194,6 +240,8 @@ export default function TrainerScreen() {
     setGroupFormName('');
     setSelectedAthleteIds([]);
     setAthleteSearchQuery('');
+    setModalAgeCategoryFilter([]);
+    setModalAgeFilter([]);
     setFormError(null);
     setEditGroupModalVisible(true);
   };
@@ -204,6 +252,8 @@ export default function TrainerScreen() {
     setGroupFormName(group.name);
     setSelectedAthleteIds([...group.athleteIds]);
     setAthleteSearchQuery('');
+    setModalAgeCategoryFilter([]);
+    setModalAgeFilter([]);
     setFormError(null);
     setEditGroupModalVisible(true);
   };
@@ -215,14 +265,48 @@ export default function TrainerScreen() {
     );
   };
 
-  // Filtered members for modal selector
+  // Filtered members for modal selector (search + age categories + ages, multi-select OR logic)
   const filteredMembersForModal = useMemo(() => {
-    if (!athleteSearchQuery.trim()) return members;
-    const q = athleteSearchQuery.toLowerCase();
-    return members.filter((m) =>
-      m.userFullName.toLowerCase().includes(q) || m.userEmail.toLowerCase().includes(q)
-    );
-  }, [members, athleteSearchQuery]);
+    let list = members;
+
+    // Text search
+    if (athleteSearchQuery.trim()) {
+      const q = athleteSearchQuery.toLowerCase();
+      list = list.filter((m) =>
+        m.userFullName.toLowerCase().includes(q) || m.userEmail.toLowerCase().includes(q)
+      );
+    }
+
+    // Age category filter (OR: matches any selected category)
+    if (modalAgeCategoryFilter.length > 0) {
+      const selectedCats = ageCategories.filter((c) => modalAgeCategoryFilter.includes(String(c.id)));
+      list = list.filter((m) => {
+        const athlete = athletes.find((a) => String(a.id) === String(m.userId));
+        return athlete != null && selectedCats.some((cat) => matchesAgeCategory(athlete.age, cat));
+      });
+    }
+
+    // Concrete age filter (OR: matches any selected age)
+    if (modalAgeFilter.length > 0) {
+      const targetAges = modalAgeFilter.map(Number);
+      list = list.filter((m) => {
+        const athlete = athletes.find((a) => String(a.id) === String(m.userId));
+        return athlete != null && targetAges.includes(athlete.age);
+      });
+    }
+
+    return list;
+  }, [members, athleteSearchQuery, modalAgeCategoryFilter, modalAgeFilter, ageCategories, athletes]);
+
+  // Select all currently filtered members in modal
+  const selectAllFiltered = () => {
+    const filteredIds = filteredMembersForModal.map((m) => m.userId);
+    setSelectedAthleteIds((prev) => {
+      const combined = new Set([...prev, ...filteredIds]);
+      return Array.from(combined);
+    });
+  };
+
 
   // Save Trainer Group
   const handleSaveGroup = async () => {
@@ -260,8 +344,8 @@ export default function TrainerScreen() {
     setIsDeletingGroup(true);
     try {
       await deleteGroup(groupToDelete.id);
-      if (activeFilter === String(groupToDelete.id)) {
-        setActiveFilter('ALL');
+      if (activeGroupKeys.includes(String(groupToDelete.id))) {
+        setActiveGroupKeys((prev) => prev.filter((k) => k !== String(groupToDelete.id)));
       }
       setGroupToDelete(null);
     } catch (e: any) {
@@ -387,22 +471,36 @@ export default function TrainerScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Dynamic Group Filter Chips (Horizontal Scroll) */}
-      <View style={styles.filterSection}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterScrollContent}
-        >
-          {filterChips.map((f) => (
-            <FilterChip
-              key={f.key}
-              label={f.label}
-              selected={activeFilter === f.key}
-              onPress={() => setActiveFilter(f.key)}
-            />
-          ))}
-        </ScrollView>
+      {/* Filter Dropdowns: Gruppe & Altersklasse (Multi-Select) */}
+      <View style={styles.filterDropdownRow}>
+        <DropdownSelect
+          label={t('trainer.filterByGroup', 'Gruppe')}
+          placeholder={t('trainer.filterByGroupPlaceholder', 'Alle Gruppen')}
+          options={groupDropdownOptions}
+          selectedKeys={activeGroupKeys}
+          onSelectKeys={setActiveGroupKeys}
+          open={groupDropdownOpen}
+          onToggle={() => {
+            setGroupDropdownOpen((prev) => !prev);
+            setAgeCategoryDropdownOpen(false);
+          }}
+          allOptionLabel={t('common.all', 'Alle')}
+        />
+        {ageCategories.length > 0 && (
+          <DropdownSelect
+            label={t('trainer.filterByAgeCategory', 'Altersklasse')}
+            placeholder={t('trainer.filterByAgeCategoryPlaceholder', 'Alle Altersklassen')}
+            options={ageCategoryDropdownOptions}
+            selectedKeys={selectedAgeCategoryIds}
+            onSelectKeys={setSelectedAgeCategoryIds}
+            open={ageCategoryDropdownOpen}
+            onToggle={() => {
+              setAgeCategoryDropdownOpen((prev) => !prev);
+              setGroupDropdownOpen(false);
+            }}
+            allOptionLabel={t('common.all', 'Alle')}
+          />
+        )}
       </View>
 
       {/* Athleten-Liste */}
@@ -419,14 +517,15 @@ export default function TrainerScreen() {
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>
-              {searchQuery.trim() || activeFilter !== 'ALL'
-                ? t('trainer.noMatchingAthletes', 'Keine passenden Sportler in dieser Gruppe gefunden.')
+              {searchQuery.trim() || activeGroupKeys.length > 0 || selectedAgeCategoryIds.length > 0
+                ? t('trainer.noMatchingAthletes', 'Keine passenden Sportler gefunden.')
                 : t('trainer.noAthletes', 'Keine Sportler vorhanden')}
             </Text>
           </View>
         }
         ItemSeparatorComponent={() => <View style={styles.separator} />}
       />
+
 
       {/* Modal 1: Trainer Groups List Modal ("Meine Gruppen") */}
       <Modal
@@ -567,6 +666,47 @@ export default function TrainerScreen() {
               </View>
             </View>
 
+            {/* Modal Filter Dropdowns: Altersklasse & Alter (Multi-Select) */}
+            {ageCategories.length > 0 && (
+              <View style={styles.modalFilterRow}>
+                <DropdownSelect
+                  label={t('groups.filterByAgeCategoryModal', 'Altersklasse')}
+                  placeholder={t('groups.filterByAgeCategoryModalPlaceholder', 'Alle Altersklassen')}
+                  options={modalAgeCategoryOptions}
+                  selectedKeys={modalAgeCategoryFilter}
+                  onSelectKeys={setModalAgeCategoryFilter}
+                  open={modalAgeCategoryDropdownOpen}
+                  onToggle={() => {
+                    setModalAgeCategoryDropdownOpen((prev) => !prev);
+                    setModalAgeDropdownOpen(false);
+                  }}
+                  allOptionLabel={t('common.all', 'Alle')}
+                />
+                <DropdownSelect
+                  label={t('groups.filterByAgeModal', 'Alter')}
+                  placeholder={t('groups.filterByAgeModalPlaceholder', 'Alle Alter')}
+                  options={modalAgeOptions}
+                  selectedKeys={modalAgeFilter}
+                  onSelectKeys={setModalAgeFilter}
+                  open={modalAgeDropdownOpen}
+                  onToggle={() => {
+                    setModalAgeDropdownOpen((prev) => !prev);
+                    setModalAgeCategoryDropdownOpen(false);
+                  }}
+                  allOptionLabel={t('common.all', 'Alle')}
+                />
+              </View>
+            )}
+
+            {/* Select Filtered Button */}
+            {(modalAgeCategoryFilter.length > 0 || modalAgeFilter.length > 0) && (
+              <TouchableOpacity style={styles.selectFilteredBtn} onPress={selectAllFiltered}>
+                <Text style={styles.selectFilteredBtnText}>
+                  ✓ {t('groups.selectFiltered', 'Alle gefilterten auswählen')} ({filteredMembersForModal.length})
+                </Text>
+              </TouchableOpacity>
+            )}
+
             {/* Search within athletes */}
             <View style={styles.athleteSearchWrap}>
               <TextInput
@@ -579,9 +719,10 @@ export default function TrainerScreen() {
             </View>
 
             {/* Athlete Checklist */}
-            <ScrollView style={styles.athletesScrollView}>
+            <ScrollView style={styles.athletesScrollView} nestedScrollEnabled>
               {filteredMembersForModal.map((member) => {
                 const isSelected = selectedAthleteIds.includes(member.userId);
+                const athleteData = athletes.find((a) => String(a.id) === String(member.userId));
                 return (
                   <TouchableOpacity
                     key={member.userId}
@@ -601,12 +742,17 @@ export default function TrainerScreen() {
                       <Text style={[styles.memberName, isSelected && styles.memberNameSelected]}>
                         {member.userFullName}
                       </Text>
-                      <Text style={styles.memberRole}>{t(`club.roles.${member.clubRole}`)}</Text>
+                      <Text style={styles.memberRole}>
+                        {athleteData
+                          ? t('trainer.athleteCard.age', { age: athleteData.age })
+                          : t(`club.roles.${member.clubRole}`)}
+                      </Text>
                     </View>
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
+
 
             {/* Actions */}
             <View style={styles.modalActions}>
@@ -721,12 +867,12 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.bold,
     color: Colors.primary,
   },
-  filterSection: {
-    paddingVertical: Spacing.sm,
-  },
-  filterScrollContent: {
+  filterDropdownRow: {
+    flexDirection: 'row',
     paddingHorizontal: Spacing.lg,
-    gap: Spacing.xs,
+    paddingVertical: Spacing.sm,
+    gap: Spacing.sm,
+    zIndex: 20,
   },
   listContent: {
     padding: Spacing.lg,
@@ -1087,5 +1233,26 @@ const styles = StyleSheet.create({
   },
   btnDisabled: {
     opacity: 0.6,
+  },
+  modalFilterRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+    zIndex: 50,
+  },
+  selectFilteredBtn: {
+    backgroundColor: Colors.primarySurface,
+    borderWidth: 1,
+    borderColor: Colors.primary + '60',
+    borderRadius: BorderRadius.sm,
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    alignItems: 'center',
+    marginBottom: Spacing.sm,
+  },
+  selectFilteredBtnText: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.semiBold,
+    color: Colors.primary,
   },
 });
